@@ -90,7 +90,7 @@ export default memo(function CustomizeSheet({
     <div className={`fixed inset-0 z-[60] flex flex-col justify-end ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
       <div
         ref={drag.backdropRef}
-        className="absolute inset-0 bg-black/70 backdrop-blur-md"
+        className="absolute inset-0 bg-black/70"
         style={drag.backdropStyle}
         onClick={onClose}
       />

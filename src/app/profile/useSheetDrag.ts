@@ -1,12 +1,13 @@
 import { useRef, useCallback } from 'react';
 
-const SHEET_OPEN_TRANSITION = 'transform 0.52s cubic-bezier(0.32, 0.72, 0, 1)';
-const SHEET_CLOSE_TRANSITION = 'transform 0.28s cubic-bezier(0.5, 0, 1, 1)';
-const SHEET_SNAPBACK_TRANSITION = 'transform 0.42s cubic-bezier(0.34, 1.2, 0.64, 1)';
-const BACKDROP_OPEN_TRANSITION = 'opacity 0.42s cubic-bezier(0.32, 0.72, 0, 1)';
-const BACKDROP_CLOSE_TRANSITION = 'opacity 0.24s ease-in';
-const BACKDROP_SNAPBACK_TRANSITION = 'opacity 0.38s cubic-bezier(0.32, 0.72, 0, 1)';
-const FLING_VELOCITY_THRESHOLD = 0.5; 
+const SHEET_OPEN_TRANSITION = 'transform 0.52s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s';
+const SHEET_CLOSE_TRANSITION = 'transform 0.28s cubic-bezier(0.5, 0, 1, 1), visibility 0s 0.28s';
+const SHEET_SNAPBACK_TRANSITION = 'transform 0.42s cubic-bezier(0.34, 1.2, 0.64, 1), visibility 0s';
+
+const BACKDROP_OPEN_TRANSITION = 'opacity 0.42s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s';
+const BACKDROP_CLOSE_TRANSITION = 'opacity 0.24s ease-in, visibility 0s 0.24s';
+const BACKDROP_SNAPBACK_TRANSITION = 'opacity 0.38s cubic-bezier(0.32, 0.72, 0, 1), visibility 0s';
+const FLING_VELOCITY_THRESHOLD = 0.5;
 
 export default function useSheetDrag(
   isOpen: boolean,
@@ -111,6 +112,7 @@ export default function useSheetDrag(
 
   const sheetStyle: React.CSSProperties = {
     transform: isOpen ? 'translateY(0px)' : 'translateY(100%)',
+    visibility: isOpen ? 'visible' : 'hidden', // <-- ADD THIS
     transition: isOpen ? SHEET_OPEN_TRANSITION : SHEET_CLOSE_TRANSITION,
     willChange: 'transform',
     contain: 'layout style',
@@ -118,6 +120,7 @@ export default function useSheetDrag(
 
   const backdropStyle: React.CSSProperties = {
     opacity: isOpen ? 1 : 0,
+    visibility: isOpen ? 'visible' : 'hidden', // <-- ADD THIS
     transition: isOpen ? BACKDROP_OPEN_TRANSITION : BACKDROP_CLOSE_TRANSITION,
     willChange: 'opacity',
   };

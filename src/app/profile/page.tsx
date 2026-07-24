@@ -908,17 +908,17 @@ export default function ProfilePage() {
           />
 
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end overflow-hidden ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-  <div
-    ref={postOptionsDrag.backdropRef}
-    className="absolute inset-0 bg-black/70"
-    style={postOptionsDrag.backdropStyle}
-    onClick={() => setPostOptionsMenu(null)}
-  />
-  <div
-    ref={postOptionsDrag.sheetRef}
-    className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 border-t border-zinc-800/60"
-    style={postOptionsDrag.sheetStyle}
-  >
+            <div
+              ref={postOptionsDrag.backdropRef}
+              className="absolute inset-0 bg-black/70" 
+              style={postOptionsDrag.backdropStyle}
+              onClick={() => setPostOptionsMenu(null)}
+            />
+            <div
+              ref={postOptionsDrag.sheetRef}
+              className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 border-t border-zinc-800/60"
+              style={postOptionsDrag.sheetStyle}
+            >
               <div
                 className="w-full pt-3 px-6 pb-4 cursor-grab active:cursor-grabbing"
                 style={{ touchAction: 'none' }}

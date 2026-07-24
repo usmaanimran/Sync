@@ -16,8 +16,13 @@ export default memo(function CreatePostSheet({
   const isPostDisabled = (!content.trim() && postImageUrls.length === 0) || isPosting || isUploading;
   
   return (
-    <div className={`fixed inset-0 z-[120] flex flex-col justify-end ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
-      <div ref={drag.backdropRef} className="absolute inset-0 bg-black/80 backdrop-blur-sm" style={drag.backdropStyle} onClick={onClose} />
+    <div className={`fixed inset-0 z-[60] flex flex-col justify-end overflow-hidden ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+      <div
+        ref={drag.backdropRef}
+        className="absolute inset-0 bg-black/70"
+        style={drag.backdropStyle}
+        onClick={onClose}
+      />
       <div ref={drag.sheetRef} className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col shadow-[0_-20px_60px_rgba(0,0,0,0.8)] border-t border-zinc-800/60" style={{ ...drag.sheetStyle, maxHeight: '90dvh', height: '90dvh' }}>
         <div className="flex-shrink-0 z-20 bg-[#0a0d10] rounded-t-[28px]" style={{ touchAction: 'none' }} onTouchStart={drag.handleTouchStart} onTouchMove={drag.handleTouchMove} onTouchEnd={drag.handleTouchEnd}>
           <div className="w-10 h-[5px] bg-zinc-700 rounded-full mx-auto mt-3 mb-1 cursor-grab active:cursor-grabbing" />

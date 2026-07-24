@@ -37,7 +37,7 @@ export default memo(function PeekPostModal({
 
   return (
     <div className={`fixed inset-0 z-[100] flex items-center justify-center px-4 md:px-0 pointer-events-none transition-opacity duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/80" />
       
       <div className={`relative w-full max-w-[420px] bg-[#0a0d10] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-8'}`}>
                  

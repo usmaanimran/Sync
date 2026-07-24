@@ -12,10 +12,10 @@ export default memo(function BannerMenuSheet({
   onRemove: () => void;
 }) {
   return (
-    <div className={`fixed inset-0 z-[70] flex flex-col justify-end ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+    <div className={`fixed inset-0 z-[70] flex flex-col justify-end overflow-hidden ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
       <div
         ref={drag.backdropRef}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60"
         style={drag.backdropStyle}
         onClick={onClose}
       />

@@ -638,6 +638,7 @@ export default function ProfilePage() {
   }, [isPeekingAnim]);
 
   const closeFeedView = useCallback(() => {
+    setPostOptionsMenu(null); // Ensure options menu is dead if they close the feed
     setFeedAnimIn(false);
     setTimeout(() => {
       setFeedVisible(false);
@@ -866,20 +867,39 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-20 selection:bg-[#4fa8ff]/30 w-full relative">
+      {/* 
+        ============================================================
+        MASTER MOBILE GPU CSS FIX BLOCK
+        ============================================================
+      */}
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* GLOBAL MOBILE GPU FIXES - These explicitly annihilate the white blur flashes globally */
-        html, body {
-          background-color: #000000 !important;
-          overscroll-behavior-y: none !important;
-        }
+        /* 1. Force mobile browsers to respect the dark theme */
+        :root { color-scheme: dark; }
+        html, body { background-color: #000000 !important; overscroll-behavior-y: none !important; }
         
+        /* 2. Kill the mobile Chrome backdrop-blur white flash natively */
         .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg {
           backdrop-filter: none !important;
           -webkit-backdrop-filter: none !important;
           background-color: rgba(0, 0, 0, 0.95) !important;
+        }
+
+        /* 3. ANNIHILATE the "White Shade" caused by Samsung Force Dark Mode inverting heavy drop shadows */
+        [class*="shadow-[0_-20px"] {
+          box-shadow: none !important;
+          border-top: 1px solid rgba(255,255,255,0.1) !important;
+        }
+
+        /* 4. Completely hide ANY bottom sheet that is translated out, preventing address-bar scroll jumps */
+        div[style*="translateY(100%)"], 
+        div[style*="translateY(120%)"],
+        .translate-y-\\[120\\%\\] {
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
         }
       `}} />
       
@@ -919,17 +939,27 @@ export default function ProfilePage() {
             onPost={handleUpdatePost} isUploading={isUploading} isPosting={isPosting}
           />
 
+          {/* POST OPTIONS SHEET - Hardened against mobile scroll glitches */}
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               ref={postOptionsDrag.backdropRef}
-              className={`absolute inset-0 bg-black/90 transition-opacity duration-300 ${postOptionsMenu ? 'opacity-100' : 'opacity-0'}`}
-              style={postOptionsDrag.backdropStyle}
+              className="absolute inset-0 bg-black/90 transition-opacity duration-300"
+              style={{
+                ...postOptionsDrag.backdropStyle,
+                opacity: postOptionsMenu ? (postOptionsDrag.backdropStyle.opacity || 1) : 0,
+                visibility: postOptionsMenu ? 'visible' : 'hidden'
+              }}
               onClick={() => setPostOptionsMenu(null)}
             />
             <div
               ref={postOptionsDrag.sheetRef}
-              className={`absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] border-t border-zinc-800/60 transition-transform duration-300 ${postOptionsMenu ? 'translate-y-0' : 'translate-y-[120%]'}`}
-              style={postOptionsDrag.sheetStyle}
+              className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 border-t border-zinc-800/60"
+              style={{
+                ...postOptionsDrag.sheetStyle,
+                transform: postOptionsMenu ? 'translateY(0px)' : 'translateY(120%)',
+                visibility: postOptionsMenu ? 'visible' : 'hidden',
+                transition: 'transform 0.3s ease-out, visibility 0.3s ease-out'
+              }}
             >
               <div
                 className="w-full pt-3 px-6 pb-4 cursor-grab active:cursor-grabbing"

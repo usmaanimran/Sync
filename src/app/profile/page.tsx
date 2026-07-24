@@ -314,6 +314,9 @@ const PostItem = memo(function PostItem({
   const images = parsePostImages(post);
   const isNear = currentIndex !== null && Math.abs(currentIndex - index) <= 1;
 
+  // FIX: Stripped all custom pointer event logic entirely.
+  // The Feed Modal will now rely entirely on smooth native scrolling.
+  // This physically prevents accidental touches from fighting the browser engine.
   return (
     <div
       ref={slideRef}
@@ -334,20 +337,13 @@ const PostItem = memo(function PostItem({
             <p className="text-[11px] text-zinc-500 font-medium">@{post.users?.username || 'user'}</p>
           </div>
         </div>
-        
-        {/* FIX: Stops pointer events so the sheet doesn't pop up during scroll */}
-        <div 
-          className="p-3 -mr-3 cursor-pointer" 
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
+        <MoreHorizontal
+          className="w-5 h-5 text-zinc-500 cursor-pointer hover:text-white transition-colors"
           onClick={(e) => { 
-            e.preventDefault(); 
             e.stopPropagation(); 
             onMenuClick(post); 
           }}
-        >
-          <MoreHorizontal className="w-5 h-5 text-zinc-500 hover:text-white transition-colors" />
-        </div>
+        />
       </div>
 
       {images.length > 0 && (
@@ -358,30 +354,17 @@ const PostItem = memo(function PostItem({
 
       <div className="px-4 pt-4 pb-2 flex items-center bg-black shrink-0">
         <div className="flex gap-6 z-10">
-          {/* FIX: Same stoppers for all interactive buttons to prevent jitter */}
-          <button 
-            className="flex items-center gap-2 group transition-all active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="flex items-center gap-2 group transition-all active:scale-95">
             <div className="p-1.5 -ml-1.5 rounded-full group-hover:bg-orange-500/10 transition-colors">
               <Zap className="w-6 h-6 text-zinc-400 group-hover:text-orange-500 transition-colors" />
             </div>
           </button>
-          <button 
-            className="flex items-center gap-2 group transition-all active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="flex items-center gap-2 group transition-all active:scale-95">
             <div className="p-1.5 rounded-full group-hover:bg-[#4fa8ff]/10 transition-colors">
               <MessageSquare className="w-6 h-6 text-zinc-400 group-hover:text-[#4fa8ff] transition-colors" />
             </div>
           </button>
-          <button 
-            className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95">
             <Send className="w-6 h-6 text-zinc-400" />
           </button>
         </div>
@@ -580,6 +563,7 @@ export default function ProfilePage() {
     }
   }, [fetchedPosts]);
 
+  // THIS LOGIC IS NOW STRICTLY FOR THE GRID, NEVER THE FEED
   const handlePointerDown = useCallback((e: React.PointerEvent, post: any) => {
     setPressedGridId(post.id);
     isDragging.current = false;
@@ -599,7 +583,6 @@ export default function ProfilePage() {
     const dx = Math.abs(e.clientX - tapStartPos.current.x);
     const dy = Math.abs(e.clientY - tapStartPos.current.y);
     
-    // Reduced threshold from 20px to 6px so page scrolling cancels tap immediately
     if (dx > 6 || dy > 6) {
       setPressedGridId(null);
       isDragging.current = true;
@@ -933,7 +916,7 @@ export default function ProfilePage() {
             />
             <div
               ref={postOptionsDrag.sheetRef}
-              /* FIX: Removed the massive drop shadow class that was being inverted by Android Dark Mode */
+              /* FIX: Completely nuked the drop-shadow class. White shade is dead. */
               className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 border-t border-zinc-800/60"
               style={postOptionsDrag.sheetStyle}
             >
@@ -1077,6 +1060,8 @@ export default function ProfilePage() {
           {userPosts.map((post, i) => {
             const initialDist = Math.min(Math.abs((feedViewIndex || 0) - i), 1);
             return (
+              /* FIX: The PostItem inside the feed no longer receives handlePointerDown/Up events. */
+              /* It scrolls 100% natively without fighting the browser. */
               <PostItem
                 key={post.id} post={post} pfpUrl={pfpUrl} index={i} currentIndex={feedViewIndex}
                 slideRef={(el: HTMLDivElement | null) => { slideRefs.current[i] = el; }}
@@ -1086,8 +1071,6 @@ export default function ProfilePage() {
                   opacity: 1 - initialDist * 0.5,
                 }}
                 onMenuClick={setPostOptionsMenu}
-                handlePointerDown={handlePointerDown} handlePointerMove={handlePointerMove}
-                handlePointerUp={handlePointerUp} handlePointerCancel={handlePointerCancel}
               />
             );
           })}
@@ -1211,6 +1194,7 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-[2px]">
+                  {/* FIX: The Grid handles the custom pointer touches correctly to open the feed. */}
                   {userPosts.map((post, index) => {
                     const postImages = parsePostImages(post);
                     return (

@@ -8,6 +8,7 @@ import getCroppedImg from '@/utils/cropImage';
 import { updateAvatarUrl, updateBannerUrl, getUserProfile, updateProfileData, updateProfileEffect } from "../actions/profile";
 import { isUsernameAvailable } from "../actions/auth";
 import { createPost, getUserPosts, updatePost, deletePost } from "../actions/post";
+
 import ProfileEffect from './ProfileEffect';
 import RankHUD from './RankHUD';
 import CropperModal from './CropperModal';
@@ -76,7 +77,6 @@ const ExpandableText = memo(function ExpandableText({ content }: { content: stri
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) setExpanded(false);
     }, { threshold: 0, rootMargin: "100px" });
-
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, [expanded]);
@@ -139,20 +139,17 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
     const W = containerRef.current?.clientWidth || 375;
     const GAP = 12; 
     const DROP_Y = 50; 
-
     const currentFloatIndex = activeRef.current - (offset / W);
 
     slidesRef.current.forEach((slide, i) => {
       if (!slide) return;
-
       const d = i - currentFloatIndex;
-
       if (Math.abs(d) > 2) {
         slide.style.visibility = 'hidden';
         return;
       }
       slide.style.visibility = 'visible';
-
+      
       const x = d * (W + GAP);
       const y = Math.abs(d) * DROP_Y;
       const s = 1 - Math.abs(d) * 0.05;
@@ -163,7 +160,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
       } else {
         slide.style.transition = 'none';
       }
-
       slide.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s})`;
       slide.style.opacity = String(o);
     });
@@ -203,7 +199,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
     }
 
     if (!s.active) return;
-
     const now = performance.now();
     const dt = Math.max(now - s.tLast, 1);
     s.vel = s.vel * 0.6 + ((e.clientX - s.xLast) / dt) * 0.4;
@@ -213,13 +208,12 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
     const W = containerRef.current?.clientWidth || 375;
     const atStart = activeRef.current === 0;
     const atEnd = activeRef.current === images.length - 1;
-    let offset = dx;
 
+    let offset = dx;
     if ((atStart && dx > 0) || (atEnd && dx < 0)) {
       const pull = W * 0.28;
       offset = Math.sign(dx) * pull * Math.tanh(Math.abs(dx) / pull);
     }
-
     offsetRef.current = offset;
     updateSlides(offset, false);
   }, [images.length, updateSlides]);
@@ -227,11 +221,10 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
   const onUp = useCallback((e: React.PointerEvent) => {
     const s = g.current;
     if (s.id !== e.pointerId || !s.active) { s.id = null; return; }
-
     s.id = null; s.active = false;
+
     const dx = e.clientX - s.x0;
     const W = containerRef.current?.clientWidth || 375;
-
     const VEL_THRESHOLD = 0.35;
     const DIST_THRESHOLD = W * 0.22;
 
@@ -244,7 +237,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
 
     activeRef.current = next;
     setActiveIndex(next);
-
     updateSlides(0, true);
   }, [images.length, updateSlides]);
 
@@ -319,7 +311,8 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
    ============================================================ */
 const PostItem = memo(function PostItem({
   post, pfpUrl, slideRef, style, onMenuClick,
-  handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, index, currentIndex }: any) {
+  handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, index, currentIndex
+}: any) {
   const images = parsePostImages(post);
   const isNear = currentIndex !== null && Math.abs(currentIndex - index) <= 1;
 
@@ -349,6 +342,8 @@ const PostItem = memo(function PostItem({
         </div>
         <MoreHorizontal
           className="w-5 h-5 text-zinc-500 cursor-pointer hover:text-white transition-colors"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); onMenuClick(post); }}
         />
       </div>
@@ -361,17 +356,29 @@ const PostItem = memo(function PostItem({
 
       <div className="px-4 pt-4 pb-2 flex items-center bg-black shrink-0">
         <div className="flex gap-6 z-10">
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
+          <button 
+            className="flex items-center gap-2 group transition-all active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <div className="p-1.5 -ml-1.5 rounded-full group-hover:bg-orange-500/10 transition-colors">
               <Zap className="w-6 h-6 text-zinc-400 group-hover:text-orange-500 transition-colors" />
             </div>
           </button>
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
+          <button 
+            className="flex items-center gap-2 group transition-all active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <div className="p-1.5 rounded-full group-hover:bg-[#4fa8ff]/10 transition-colors">
               <MessageSquare className="w-6 h-6 text-zinc-400 group-hover:text-[#4fa8ff] transition-colors" />
             </div>
           </button>
-          <button className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95">
+          <button 
+            className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <Send className="w-6 h-6 text-zinc-400" />
           </button>
         </div>
@@ -393,30 +400,38 @@ export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [pressedGridId, setPressedGridId] = useState<string | null>(null);
+
   const [isMounted, setIsMounted] = useState(false);
   const [isProfileFetching, setIsProfileFetching] = useState(true);
   const [activeTab, setActiveTab] = useState('posts');
   const [isUploading, setIsUploading] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
+  
   const [isEditing, setIsEditing] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [isBannerMenuOpen, setIsBannerMenuOpen] = useState(false);
   const [isCustomizeMenuOpen, setIsCustomizeMenuOpen] = useState(false);
+
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [cropType, setCropType] = useState<'avatar' | 'banner' | 'post'>('avatar');
   const [pfpUrl, setPfpUrl] = useState(generateDefaultAvatar('Nexus'));
   const [bannerUrl, setBannerUrl] = useState(generateDefaultBanner('Nexus'));
+
   const [profileData, setProfileData] = useState<ProfileDraft>({ name: '', username: '', bio: '', websites: [''], profile_effect: 'none' });
   const [draftProfile, setDraftProfile] = useState<ProfileDraft>({ name: '', username: '', bio: '', websites: [''], profile_effect: 'none' });
+  
   const [originalUsername, setOriginalUsername] = useState("");
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [saveError, setSaveError] = useState("");
+
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [isPostsFetching, setIsPostsFetching] = useState(true);
 
@@ -545,8 +560,10 @@ export default function ProfilePage() {
       setProfileData(formattedData);
       setDraftProfile(formattedData);
       setOriginalUsername(fetchedProfile.username || '');
+      
       setPfpUrl(fetchedProfile.avatar_url || generateDefaultAvatar(fetchedProfile.username));
       setBannerUrl(fetchedProfile.banner_url || generateDefaultBanner(fetchedProfile.username));
+      
       setIsProfileFetching(false);
     } else if (status !== "loading" && userId && !isProfileLoading) {
       signOut({ callbackUrl: "/login" });
@@ -565,6 +582,7 @@ export default function ProfilePage() {
     isDragging.current = false;
     justPeeked.current = false;
     tapStartPos.current = { x: e.clientX, y: e.clientY };
+
     pressTimer.current = setTimeout(() => {
       if (!isDragging.current) {
         setPeekPost(post);
@@ -603,7 +621,7 @@ export default function ProfilePage() {
         const h = feedScrollRef.current.clientHeight || window.innerHeight;
         setFeedHeight(h);
         feedScrollRef.current.scrollTop = h * index;
-
+        
         slideRefs.current.forEach((slide, i) => {
           if (!slide) return;
           const dist = Math.min(Math.abs(index - i), 1);
@@ -611,7 +629,6 @@ export default function ProfilePage() {
           slide.style.opacity = String(1 - dist * 0.5);
         });
       }
-
       setFeedViewIndex(index);
       feedViewIndexRef.current = index;
       setFeedVisible(true);
@@ -626,6 +643,7 @@ export default function ProfilePage() {
     setPressedGridId(null);
     if (pressTimer.current) clearTimeout(pressTimer.current);
     isDragging.current = false;
+
     if (isPeekingAnim || justPeeked.current) {
       setIsPeekingAnim(false);
       setTimeout(() => setPeekPost(null), 300);
@@ -668,7 +686,7 @@ export default function ProfilePage() {
   const handleCropAndUpload = useCallback(async (croppedAreaPixels: any) => {
     if (!imageSrc || !croppedAreaPixels) return;
     setIsUploading(true);
-
+    
     try {
       const croppedFile = await getCroppedImg(imageSrc, croppedAreaPixels, cropType);
       if (!croppedFile) throw new Error("Cropping failed");
@@ -681,6 +699,7 @@ export default function ProfilePage() {
       } else {
         const publicId = `${cropType}_${Math.random().toString(36).substring(2, 10)}`;
         const sig = await getCloudinarySignature(publicId, "nexus_uploads");
+        
         if (!sig.success) throw new Error(sig.error || "Signature generation failed");
 
         const formData = new FormData();
@@ -695,6 +714,7 @@ export default function ProfilePage() {
           `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
           { method: "POST", body: formData }
         );
+
         const data = await cloudinaryResponse.json();
         const secureImageUrl = data.secure_url;
 
@@ -718,8 +738,10 @@ export default function ProfilePage() {
   const handlePublishPost = useCallback(async () => {
     if (!postContent.trim() && draftPostFiles.length === 0) return;
     setIsPosting(true);
+
     try {
       const uploadedUrls: string[] = [];
+
       for (const file of draftPostFiles) {
         const formData = new FormData();
         formData.append("file", file);
@@ -728,8 +750,8 @@ export default function ProfilePage() {
         const data = await cloudinaryResponse.json();
         uploadedUrls.push(data.secure_url);
       }
-      const result = await createPost(postContent, uploadedUrls);
 
+      const result = await createPost(postContent, uploadedUrls);
       if (result.success && result.post) {
         setUserPosts(prev => [{
           ...result.post,
@@ -761,8 +783,10 @@ export default function ProfilePage() {
   const handleUpdatePost = useCallback(async () => {
     if (!editingPostId) return;
     setIsPosting(true);
+
     try {
       const newlyUploadedUrls: string[] = [];
+
       for (const file of draftPostFiles) {
         const formData = new FormData();
         formData.append("file", file);
@@ -771,9 +795,11 @@ export default function ProfilePage() {
         const data = await cloudinaryResponse.json();
         newlyUploadedUrls.push(data.secure_url);
       }
-      const finalUrls = [...existingUrls, ...newlyUploadedUrls];
-      const result = await updatePost(editingPostId, postContent, finalUrls, urlsToDelete);
 
+      const finalUrls = [...existingUrls, ...newlyUploadedUrls];
+
+      const result = await updatePost(editingPostId, postContent, finalUrls, urlsToDelete);
+      
       if (result.success && result.post) {
         setUserPosts(prev => prev.map(p => p.id === editingPostId ? {
           ...result.post,
@@ -791,6 +817,7 @@ export default function ProfilePage() {
   const handleDeletePost = useCallback(async (post: any) => {
     if (!post) return;
     setIsPosting(true);
+
     try {
       const urlsToNuke = parsePostImages(post);
       const result = await deletePost(post.id, urlsToNuke);
@@ -817,8 +844,10 @@ export default function ProfilePage() {
 
   const handleSaveProfile = useCallback(async () => {
     if (usernameAvailable === false) return;
+    
     setSaveError("");
     const result = await updateProfileData(draftProfile);
+    
     if (result.success) {
       setProfileData(draftProfile);
       setOriginalUsername(draftProfile.username);
@@ -847,7 +876,6 @@ export default function ProfilePage() {
       </div>
     );
   }
-
   if (status === "unauthenticated") return null;
 
   return (
@@ -856,7 +884,7 @@ export default function ProfilePage() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
-
+      
       <ProfileEffect effectType={profileData.profile_effect} />
 
       {isMounted && (
@@ -870,7 +898,7 @@ export default function ProfilePage() {
             isProcessing={isUploading}
           />
           <PeekPostModal post={peekPost} isVisible={isPeekingAnim} pfpUrl={pfpUrl} />
-
+          
           <CreatePostSheet
             isOpen={isCreatePostOpen} drag={createPostDrag} onClose={() => setIsCreatePostOpen(false)}
             content={postContent} onContentChange={setPostContent} onChooseImage={() => postInputRef.current?.click()}
@@ -878,6 +906,7 @@ export default function ProfilePage() {
             onRemoveImage={handleRemoveDraftUrl}
             onPost={handlePublishPost} isUploading={isUploading} isPosting={isPosting}
           />
+
           <CreatePostSheet
             isOpen={isEditPostOpen} drag={editPostDrag} onClose={() => setIsEditPostOpen(false)}
             content={postContent} onContentChange={setPostContent} onChooseImage={() => postInputRef.current?.click()}
@@ -891,10 +920,11 @@ export default function ProfilePage() {
             }}
             onPost={handleUpdatePost} isUploading={isUploading} isPosting={isPosting}
           />
+
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               ref={postOptionsDrag.backdropRef}
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/90"
               style={postOptionsDrag.backdropStyle}
               onClick={() => setPostOptionsMenu(null)}
             />
@@ -937,6 +967,7 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
+
           <input type="file" ref={postInputRef} accept="image/*" onChange={(e) => onFileChange(e, 'post')} className="hidden" />
 
           <EditProfileSheet
@@ -1032,6 +1063,7 @@ export default function ProfilePage() {
           </div>
           <div className="w-8" />
         </div>
+
         <div
           ref={feedScrollRef}
           onScroll={handleFeedScroll}
@@ -1063,6 +1095,7 @@ export default function ProfilePage() {
           <div className="h-36 w-full relative overflow-hidden bg-black flex justify-center items-center">
             <div className="absolute w-full h-full bg-cover bg-center origin-top transition-all duration-700" style={{ backgroundImage: `url(${bannerUrl})` }} />
             <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black" />
+            
             {isUploading && cropType === 'banner' && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-10">
                 <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1114,6 +1147,7 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
         <div className="px-4 pt-3 space-y-3">
           <div>
             <h1 className="text-lg font-bold flex items-center gap-1">{profileData.name || 'Anonymous User'} <CheckCircle2 className="w-4 h-4 text-blue-500 fill-blue-500/20" /></h1>

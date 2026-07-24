@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 // Forces the browser and mobile system UI to use a pitch-black theme color
 export const viewport: Viewport = {
   themeColor: "#000000",
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

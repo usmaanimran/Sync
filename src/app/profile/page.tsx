@@ -125,7 +125,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
   const activeRef = useRef(0);
   const offsetRef = useRef(0);
 
-  // Gesture State
   const g = useRef({
     id: null as number | null,
     x0: 0, y0: 0,
@@ -310,8 +309,7 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
    POST ITEM COMPONENT
    ============================================================ */
 const PostItem = memo(function PostItem({
-  post, pfpUrl, slideRef, style, onMenuClick,
-  handlePointerDown, handlePointerMove, handlePointerUp, handlePointerCancel, index, currentIndex
+  post, pfpUrl, slideRef, style, onMenuClick, index, currentIndex
 }: any) {
   const images = parsePostImages(post);
   const isNear = currentIndex !== null && Math.abs(currentIndex - index) <= 1;
@@ -321,10 +319,6 @@ const PostItem = memo(function PostItem({
       ref={slideRef}
       className="flex-none snap-start snap-always w-full flex flex-col overflow-y-auto overflow-x-hidden bg-black pb-16 box-border will-change-[transform,opacity]"
       style={style}
-      onPointerDown={(e) => handlePointerDown(e, post)}
-      onPointerMove={handlePointerMove}
-      onPointerUp={() => handlePointerUp(index)}
-      onPointerCancel={handlePointerCancel}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-between px-4 py-3 bg-[#0a0d10]">
@@ -340,12 +334,16 @@ const PostItem = memo(function PostItem({
             <p className="text-[11px] text-zinc-500 font-medium">@{post.users?.username || 'user'}</p>
           </div>
         </div>
-        <MoreHorizontal
-          className="w-5 h-5 text-zinc-500 cursor-pointer hover:text-white transition-colors"
-          onPointerDown={(e) => e.stopPropagation()}
-          onPointerUp={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onMenuClick(post); }}
-        />
+        <div 
+          className="p-3 -mr-3 cursor-pointer" 
+          onClick={(e) => { 
+            e.preventDefault(); 
+            e.stopPropagation(); 
+            onMenuClick(post); 
+          }}
+        >
+          <MoreHorizontal className="w-5 h-5 text-zinc-500 hover:text-white transition-colors" />
+        </div>
       </div>
 
       {images.length > 0 && (
@@ -356,29 +354,17 @@ const PostItem = memo(function PostItem({
 
       <div className="px-4 pt-4 pb-2 flex items-center bg-black shrink-0">
         <div className="flex gap-6 z-10">
-          <button 
-            className="flex items-center gap-2 group transition-all active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="flex items-center gap-2 group transition-all active:scale-95">
             <div className="p-1.5 -ml-1.5 rounded-full group-hover:bg-orange-500/10 transition-colors">
               <Zap className="w-6 h-6 text-zinc-400 group-hover:text-orange-500 transition-colors" />
             </div>
           </button>
-          <button 
-            className="flex items-center gap-2 group transition-all active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="flex items-center gap-2 group transition-all active:scale-95">
             <div className="p-1.5 rounded-full group-hover:bg-[#4fa8ff]/10 transition-colors">
               <MessageSquare className="w-6 h-6 text-zinc-400 group-hover:text-[#4fa8ff] transition-colors" />
             </div>
           </button>
-          <button 
-            className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95"
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => e.stopPropagation()}
-          >
+          <button className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95">
             <Send className="w-6 h-6 text-zinc-400" />
           </button>
         </div>
@@ -883,6 +869,18 @@ export default function ProfilePage() {
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* GLOBAL MOBILE GPU FIXES - These explicitly annihilate the white blur flashes globally */
+        html, body {
+          background-color: #000000 !important;
+          overscroll-behavior-y: none !important;
+        }
+        
+        .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          background-color: rgba(0, 0, 0, 0.95) !important;
+        }
       `}} />
       
       <ProfileEffect effectType={profileData.profile_effect} />
@@ -924,13 +922,13 @@ export default function ProfilePage() {
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               ref={postOptionsDrag.backdropRef}
-              className="absolute inset-0 bg-black/90"
+              className={`absolute inset-0 bg-black/90 transition-opacity duration-300 ${postOptionsMenu ? 'opacity-100' : 'opacity-0'}`}
               style={postOptionsDrag.backdropStyle}
               onClick={() => setPostOptionsMenu(null)}
             />
             <div
               ref={postOptionsDrag.sheetRef}
-              className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 shadow-[0_-20px_60px_rgba(0,0,0,0.8)] border-t border-zinc-800/60"
+              className={`absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 shadow-[0_-20px_60px_rgba(0,0,0,0.9)] border-t border-zinc-800/60 transition-transform duration-300 ${postOptionsMenu ? 'translate-y-0' : 'translate-y-[120%]'}`}
               style={postOptionsDrag.sheetStyle}
             >
               <div
@@ -1082,8 +1080,6 @@ export default function ProfilePage() {
                   opacity: 1 - initialDist * 0.5,
                 }}
                 onMenuClick={setPostOptionsMenu}
-                handlePointerDown={handlePointerDown} handlePointerMove={handlePointerMove}
-                handlePointerUp={handlePointerUp} handlePointerCancel={handlePointerCancel}
               />
             );
           })}

@@ -334,8 +334,12 @@ const PostItem = memo(function PostItem({
             <p className="text-[11px] text-zinc-500 font-medium">@{post.users?.username || 'user'}</p>
           </div>
         </div>
+        
+        {/* FIX: Stops pointer events so the sheet doesn't pop up during scroll */}
         <div 
           className="p-3 -mr-3 cursor-pointer" 
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
           onClick={(e) => { 
             e.preventDefault(); 
             e.stopPropagation(); 
@@ -354,17 +358,30 @@ const PostItem = memo(function PostItem({
 
       <div className="px-4 pt-4 pb-2 flex items-center bg-black shrink-0">
         <div className="flex gap-6 z-10">
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
+          {/* FIX: Same stoppers for all interactive buttons to prevent jitter */}
+          <button 
+            className="flex items-center gap-2 group transition-all active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <div className="p-1.5 -ml-1.5 rounded-full group-hover:bg-orange-500/10 transition-colors">
               <Zap className="w-6 h-6 text-zinc-400 group-hover:text-orange-500 transition-colors" />
             </div>
           </button>
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
+          <button 
+            className="flex items-center gap-2 group transition-all active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <div className="p-1.5 rounded-full group-hover:bg-[#4fa8ff]/10 transition-colors">
               <MessageSquare className="w-6 h-6 text-zinc-400 group-hover:text-[#4fa8ff] transition-colors" />
             </div>
           </button>
-          <button className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95">
+          <button 
+            className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95"
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
+          >
             <Send className="w-6 h-6 text-zinc-400" />
           </button>
         </div>
@@ -638,7 +655,6 @@ export default function ProfilePage() {
   }, [isPeekingAnim]);
 
   const closeFeedView = useCallback(() => {
-    setPostOptionsMenu(null); // Ensure options menu is dead if they close the feed
     setFeedAnimIn(false);
     setTimeout(() => {
       setFeedVisible(false);
@@ -867,40 +883,9 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-20 selection:bg-[#4fa8ff]/30 w-full relative">
-      {/* 
-        ============================================================
-        MASTER MOBILE GPU CSS FIX BLOCK
-        ============================================================
-      */}
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* 1. Force mobile browsers to respect the dark theme */
-        :root { color-scheme: dark; }
-        html, body { background-color: #000000 !important; overscroll-behavior-y: none !important; }
-        
-        /* 2. Kill the mobile Chrome backdrop-blur white flash natively */
-        .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
-          background-color: rgba(0, 0, 0, 0.95) !important;
-        }
-
-        /* 3. ANNIHILATE the "White Shade" caused by Samsung Force Dark Mode inverting heavy drop shadows */
-        [class*="shadow-[0_-20px"] {
-          box-shadow: none !important;
-          border-top: 1px solid rgba(255,255,255,0.1) !important;
-        }
-
-        /* 4. Completely hide ANY bottom sheet that is translated out, preventing address-bar scroll jumps */
-        div[style*="translateY(100%)"], 
-        div[style*="translateY(120%)"],
-        .translate-y-\\[120\\%\\] {
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
       `}} />
       
       <ProfileEffect effectType={profileData.profile_effect} />
@@ -939,27 +924,18 @@ export default function ProfilePage() {
             onPost={handleUpdatePost} isUploading={isUploading} isPosting={isPosting}
           />
 
-          {/* POST OPTIONS SHEET - Hardened against mobile scroll glitches */}
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               ref={postOptionsDrag.backdropRef}
-              className="absolute inset-0 bg-black/90 transition-opacity duration-300"
-              style={{
-                ...postOptionsDrag.backdropStyle,
-                opacity: postOptionsMenu ? (postOptionsDrag.backdropStyle.opacity || 1) : 0,
-                visibility: postOptionsMenu ? 'visible' : 'hidden'
-              }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+              style={postOptionsDrag.backdropStyle}
               onClick={() => setPostOptionsMenu(null)}
             />
             <div
               ref={postOptionsDrag.sheetRef}
+              /* FIX: Removed the massive drop shadow class that was being inverted by Android Dark Mode */
               className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col pb-10 border-t border-zinc-800/60"
-              style={{
-                ...postOptionsDrag.sheetStyle,
-                transform: postOptionsMenu ? 'translateY(0px)' : 'translateY(120%)',
-                visibility: postOptionsMenu ? 'visible' : 'hidden',
-                transition: 'transform 0.3s ease-out, visibility 0.3s ease-out'
-              }}
+              style={postOptionsDrag.sheetStyle}
             >
               <div
                 className="w-full pt-3 px-6 pb-4 cursor-grab active:cursor-grabbing"
@@ -1110,6 +1086,8 @@ export default function ProfilePage() {
                   opacity: 1 - initialDist * 0.5,
                 }}
                 onMenuClick={setPostOptionsMenu}
+                handlePointerDown={handlePointerDown} handlePointerMove={handlePointerMove}
+                handlePointerUp={handlePointerUp} handlePointerCancel={handlePointerCancel}
               />
             );
           })}

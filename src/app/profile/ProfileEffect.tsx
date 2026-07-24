@@ -72,17 +72,20 @@ export default function ProfileEffect({ effectType }: ProfileEffectProps) {
   if (effectType === 'none' || !effectType) return null;
 
   return (
-    <div 
+    <div
       className={`fixed inset-0 pointer-events-none z-0 transition-opacity duration-1000 ease-in-out
-      ${isIntense ? 'opacity-100' : 'opacity-15'}`} 
-      style={{ mixBlendMode: 'screen' }}
+      ${isIntense ? 'opacity-100' : 'opacity-15'}`}
+      style={{ 
+        mixBlendMode: 'screen',
+        WebkitMaskImage: 'linear-gradient(to bottom, black 50%, transparent 95%)',
+        maskImage: 'linear-gradient(to bottom, black 50%, transparent 95%)'
+      }}
     >
-      <canvas 
-        ref={canvasRef} 
+      <canvas
+        ref={canvasRef}
         className="w-full h-full object-cover opacity-60"
       />
-      {/* Gradient overlay to mask the bottom so it fades cleanly into your posts */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
+      {/* The absolute gradient div is completely gone. The CSS mask handles it flawlessly now. */}
     </div>
   );
 }

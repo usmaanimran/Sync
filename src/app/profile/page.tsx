@@ -865,7 +865,7 @@ export default function ProfilePage() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans pb-20 selection:bg-[#4fa8ff]/30 w-full relative">
+    <div className="min-h-screen bg-black text-white font-sans selection:bg-[#4fa8ff]/30 w-full relative">
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -1076,7 +1076,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="max-w-xl mx-auto min-h-screen relative z-10 overflow-x-hidden">
+        <div className="max-w-xl mx-auto min-h-screen flex flex-col relative z-10 overflow-x-hidden">
         <div className="relative">
           <div className="h-36 w-full relative overflow-hidden bg-black flex justify-center items-center">
             <div className="absolute w-full h-full bg-cover bg-center origin-top transition-all duration-700" style={{ backgroundImage: `url(${bannerUrl})` }} />
@@ -1181,7 +1181,7 @@ export default function ProfilePage() {
           <button onClick={() => setActiveTab('sandbox')} className={`flex-1 py-3 flex justify-center transition-colors ${activeTab === 'sandbox' ? 'border-b-[1px] border-white text-white' : 'text-zinc-500'}`}><FolderGit2 className="w-6 h-6" /></button>
         </div>
 
-        <div className="min-h-[300px] bg-black">
+        <div className="flex-1 w-full min-h-[300px] bg-black">
           {activeTab === 'posts' && (
             <div className="pt-0.5 pb-20 bg-black">
               {isPostsFetching ? (

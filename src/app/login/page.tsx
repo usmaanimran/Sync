@@ -7,35 +7,33 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  
-  // Form fields
+
+  // Component state
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
-  
-  // UI and feedback states
-  const [errors, setErrors] = useState<Record<string, boolean>>({});
+
+  // UI state
+  const [errors, setErrors] = useState<Record<string, boolean>>({}); // 👈 Add this line
   const [serverError, setServerError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [shakeTrigger, setShakeTrigger] = useState(false);
   const [loading, setLoading] = useState(false);
-  
-  // State for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
 
-  // Check URL query params on initial load
+  // Handle post-reset redirect states
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("reset") === "success") {
-      // Shortened text for a tighter pill
+      // Render success message on password reset
       setSuccessMsg("Password was reset. Welcome back.");
       window.history.replaceState(null, "", "/login");
 
-      // Auto-dismiss the toast after 2.5 seconds
+      // Auto-dismiss notification
       const timer = setTimeout(() => {
         setSuccessMsg("");
       }, 2500);
 
-      // Cleanup function to prevent memory leaks
+      // Cleanup timer on unmount
       return () => clearTimeout(timer);
     }
   }, []);
@@ -47,7 +45,7 @@ export default function LoginPage() {
     setServerError(""); 
     const newErrors: Record<string, boolean> = {};
 
-    // 1. Validation check
+    // Validate required fields
     if (!identifier.trim()) newErrors.identifier = true;
     if (!password) newErrors.password = true;
 
@@ -62,24 +60,24 @@ export default function LoginPage() {
     setLoading(true);
     
     try {
-      // 2. Trigger NextAuth credentials verification
+      // Authenticate via NextAuth
       const result = await signIn("credentials", {
         redirect: false, 
         identifier: identifier.trim(), 
         password: password
       });
 
-      // 3. Handle Auth response pipeline
+      // Process authentication result
       if (result?.error) {
         // Generic error message to prevent user enumeration
         setServerError("Invalid username, email, or password."); 
         setShakeTrigger(true);
         setTimeout(() => setShakeTrigger(false), 500);
       } else if (result?.ok) {
-        // Clear any lingering error parameters from browser history
+        // Clear query parameters from history
         window.history.replaceState(null, "", "/login");
         
-        // Push validated token profile into the home feed
+        // Redirect to authenticated route
         router.push("/profile"); 
       }
     } catch (err) {
@@ -129,7 +127,7 @@ export default function LoginPage() {
         }
       `}} />
 
-      {/* --- SLEEK FLOATING TOAST NOTIFICATION --- */}
+      {/* Toast Notification */}
       {successMsg && (
         <div className="fixed top-10 inset-x-0 mx-auto w-max z-[100] flex items-center gap-2.5 rounded-full border border-emerald-500/20 bg-[#1e2b36]/90 backdrop-blur-xl px-4 py-2.5 shadow-[0_8px_30px_rgba(16,185,129,0.15)] animate-toast-drop">
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20">
@@ -142,7 +140,7 @@ export default function LoginPage() {
           </span>
         </div>
       )}
-      {/* ----------------------------------------- */}
+      {/* End Toast */}
 
       <div className="flex flex-1 flex-col items-center justify-center w-full max-w-sm mx-auto animate-page-enter">
         

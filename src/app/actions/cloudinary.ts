@@ -3,6 +3,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../api/auth/[...nextauth]/route";
+import crypto from "crypto";
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -11,22 +12,27 @@ cloudinary.config({
 });
 
 /**
- * Generates a one-time cryptographic HMAC signature on the server.
- * Allows the client to upload directly to Cloudinary without exposing API secrets
- * while preventing unauthorized upload quota abuse.
+ * Generates an HMAC signature for secure Cloudinary uploads.
+ * Restricts client uploads to a server-generated public ID to prevent asset overwriting.
+ * 
+ * @param prefix - Optional prefix for the generated public ID.
+ * @param folder - Target folder in Cloudinary.
+ * @returns Upload credentials and cryptographic signature.
  */
-export async function getCloudinarySignature(publicId: string, folder: string = "nexus_uploads") {
+export async function getCloudinarySignature(prefix: string = "upload", folder: string = "nexus_uploads") {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return { success: false, error: "Unauthorized: Active session required." };
   }
 
   const timestamp = Math.round(new Date().getTime() / 1000);
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9]/g, "");
+  const safePublicId = `${safePrefix}_${session.user.id}_${crypto.randomBytes(8).toString("hex")}`;
 
-  // Exact parameters to sign (must match the client POST body)
+  // Parameters to sign must exactly match the client-side POST body payload
   const paramsToSign = {
     folder: folder,
-    public_id: publicId,
+    public_id: safePublicId,
     timestamp: timestamp,
   };
 
@@ -42,5 +48,6 @@ export async function getCloudinarySignature(publicId: string, folder: string = 
     apiKey: process.env.CLOUDINARY_API_KEY,
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "drdy6ktb6",
     folder,
+    publicId: safePublicId,
   };
 }

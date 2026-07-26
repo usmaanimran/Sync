@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { CheckCircle2, X } from 'lucide-react';
 import { timeAgo } from './helpers';
 
-/* Helper to parse the JSON array of images */
+/** Robust JSON parser for extracting image URLs from nested stringified payloads */
 const parsePostImages = (post: any) => {
   const rawData = post?.image_urls || post?.image_url;
   if (!rawData) return [];
@@ -28,7 +28,7 @@ const parsePostImages = (post: any) => {
 
 export default memo(function PeekPostModal({
   post, isVisible, pfpUrl }: { 
-   post: any; isVisible: boolean; pfpUrl: string; // <-- Added pfpUrl prop
+   post: any; isVisible: boolean; pfpUrl: string; // Contextual profile avatar injection
 }) {
   if (!post && !isVisible) return null;
 
@@ -44,7 +44,7 @@ export default memo(function PeekPostModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900/80 bg-[#0a0d10] z-10 shrink-0">
           <div className="flex items-center">
-            {/* Added the fallback right here 👇 */}
+            {/* Render user-specific avatar with context fallback */}
             <img src={post?.users?.avatar_url || pfpUrl} alt="" className="w-9 h-9 rounded-full object-cover border border-zinc-800" />
             
           
@@ -61,7 +61,7 @@ export default memo(function PeekPostModal({
           </button>
         </div>
 
-        {/* Scrollable Content */}
+        {/* Scrollable Text and Image Context */}
         <div className="overflow-y-auto flex-1 bg-[#0a0d10]">
           {post?.content && (
             <div className="px-4 py-3 text-[14px] text-slate-200 leading-relaxed whitespace-pre-wrap">
@@ -72,7 +72,7 @@ export default memo(function PeekPostModal({
           {displayImage && (
             <div className="w-full bg-zinc-950 flex items-center justify-center relative">
               <img src={displayImage} alt="Post" className="w-full h-auto object-cover max-h-[650px]" />
-              {/* Little badge to show if there are more images! */}
+              {/* Render pagination indicator for multi-image arrays */}
               {images.length > 1 && (
                 <div className="absolute top-3 right-3 bg-black/60 px-2 py-1 rounded text-[10px] text-white font-bold backdrop-blur-md">
                   1 / {images.length}

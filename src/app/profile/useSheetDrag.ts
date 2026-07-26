@@ -112,7 +112,7 @@ export default function useSheetDrag(
 
   const sheetStyle: React.CSSProperties = {
     transform: isOpen ? 'translateY(0px)' : 'translateY(100%)',
-    visibility: isOpen ? 'visible' : 'hidden', // <-- ADD THIS
+    visibility: isOpen ? 'visible' : 'hidden', // Toggle DOM visibility to prevent phantom interactions
     transition: isOpen ? SHEET_OPEN_TRANSITION : SHEET_CLOSE_TRANSITION,
     willChange: 'transform',
     contain: 'layout style',
@@ -120,7 +120,7 @@ export default function useSheetDrag(
 
   const backdropStyle: React.CSSProperties = {
     opacity: isOpen ? 1 : 0,
-    visibility: isOpen ? 'visible' : 'hidden', // <-- ADD THIS
+    visibility: isOpen ? 'visible' : 'hidden', // Toggle DOM visibility to prevent phantom interactions
     transition: isOpen ? BACKDROP_OPEN_TRANSITION : BACKDROP_CLOSE_TRANSITION,
     willChange: 'opacity',
   };

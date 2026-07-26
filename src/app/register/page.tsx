@@ -42,27 +42,22 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [shakeTrigger, setShakeTrigger] = useState(false);
   
-  // New state for toggling password visibility
   const [showPassword, setShowPassword] = useState(false);
   
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
   const [serverError, setServerError] = useState("");
 
-  const checkUsernameDatabase = async (e: any) => {
-    // Read the exact value directly from the input element at the moment of blur
-    const currentUsername = e.target.value.toLowerCase().replace(/\s/g, '');
-
-    // Check if the name is 2 characters or more
-    if (currentUsername.length > 1) {
+  // DB Check must be async to await the server action resolution
+  const checkUsernameDatabase = async (usernameToCheck: string) => {
+    if (usernameToCheck.length > 1) {
       setIsCheckingUsername(true);
       setUsernameAvailable(null);
       
       try {
-        const available = await isUsernameAvailable(currentUsername);
+        const available = await isUsernameAvailable(usernameToCheck);
         setUsernameAvailable(available);
       } catch (error) {
-        // Fallback if the network request fails so it doesn't spin forever
         setUsernameAvailable(null);
       } finally {
         setIsCheckingUsername(false);
@@ -103,11 +98,9 @@ export default function RegisterPage() {
     try {
       const result = await registerUser(formData);
       if (result.success) {
-        // 🚀 FIX: Route them straight to your verification page with the email query param
         router.push(`/verify-email?email=${encodeURIComponent(result.email)}`);
       }
     } catch (err: any) {
-      // Catch specific errors from your 15-minute lock system or fall back to generic message
       setServerError(err.message || "Registration failed. This Email or Username is already taken.");
     }
   };
@@ -158,7 +151,10 @@ export default function RegisterPage() {
             label="Email" 
             type="email" 
             value={emailOrMobile} 
-            onChange={(e: any) => { setEmailOrMobile(e.target.value); setErrors({...errors, emailOrMobile: false}); }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { 
+              setEmailOrMobile(e.target.value); 
+              setErrors(prev => ({...prev, emailOrMobile: false})); 
+            }}
             hasError={errors.emailOrMobile}
             shakeTrigger={shakeTrigger}
             delay="50ms"
@@ -168,7 +164,10 @@ export default function RegisterPage() {
             label="Full Name" 
             type="text" 
             value={fullName} 
-            onChange={(e: any) => { setFullName(e.target.value); setErrors({...errors, fullName: false}); }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { 
+              setFullName(e.target.value); 
+              setErrors(prev => ({...prev, fullName: false})); 
+            }}
             hasError={errors.fullName}
             shakeTrigger={shakeTrigger}
             delay="100ms"
@@ -178,12 +177,15 @@ export default function RegisterPage() {
             label="Username" 
             type="text" 
             value={username} 
-            onChange={(e: any) => { 
-              setUsername(e.target.value.toLowerCase().replace(/\s/g, '')); 
-              setErrors({...errors, username: false});
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { 
+              // Enforce lowercase and strip all whitespace during typing
+              const sanitizedInput = e.target.value.toLowerCase().replace(/\s/g, '');
+              setUsername(sanitizedInput); 
+              setErrors(prev => ({...prev, username: false}));
               setUsernameAvailable(null); 
             }}
-            onBlur={checkUsernameDatabase} 
+            // Execute DB validation on input blur to prevent excessive API calls
+            onBlur={() => checkUsernameDatabase(username)} 
             hasError={errors.username}
             shakeTrigger={shakeTrigger}
             delay="150ms"
@@ -200,9 +202,12 @@ export default function RegisterPage() {
 
           <FloatingInput 
             label="Password" 
-            type={showPassword ? "text" : "password"} // Dynamic type based on state
+            type={showPassword ? "text" : "password"}
             value={password} 
-            onChange={(e: any) => { setPassword(e.target.value); setErrors({...errors, password: false}); }}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => { 
+              setPassword(e.target.value); 
+              setErrors(prev => ({...prev, password: false})); 
+            }}
             hasError={errors.password}
             shakeTrigger={shakeTrigger}
             delay="200ms"
@@ -214,12 +219,10 @@ export default function RegisterPage() {
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
-                  // Eye Slash Icon (Hide)
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                   </svg>
                 ) : (
-                  // Eye Icon (Show)
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -236,7 +239,10 @@ export default function RegisterPage() {
             <input
               type="date"
               value={birthday}
-              onChange={(e) => { setBirthday(e.target.value); setErrors({...errors, birthday: false}); }}
+              onChange={(e) => { 
+                setBirthday(e.target.value); 
+                setErrors(prev => ({...prev, birthday: false})); 
+              }}
               className={`peer w-full rounded-xl border bg-[#1a2229]/80 backdrop-blur-md px-4 pb-2 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] [&::-webkit-calendar-picker-indicator]:invert ${
                 errors.birthday 
                   ? "border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)] focus:shadow-[0_0_20px_rgba(239,68,68,0.3)]" 

@@ -7,14 +7,14 @@ export default function HomePage() {
   const { status } = useSession();
   const router = useRouter();
 
-  // Boot unauthenticated users back to login
+  // Enforce authentication via client-side redirect
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
   }, [status, router]);
 
-  // Prevent a flash of the dashboard while checking credentials
+  // Display loading state during session validation
   if (status === "loading" || status === "unauthenticated") {
     return (
       <div className="min-h-screen bg-neutral-950 flex items-center justify-center">

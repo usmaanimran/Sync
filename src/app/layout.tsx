@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Providers from "./providers"; // Import the provider
+import Providers from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: "Join the active grid.",
 };
 
-// Forces the browser and mobile system UI to use a pitch-black theme color
+// Enforce strict dark mode system UI colors
 export const viewport: Viewport = {
   themeColor: "#000000",
   colorScheme: "dark",

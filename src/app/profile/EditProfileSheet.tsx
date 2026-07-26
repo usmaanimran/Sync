@@ -52,7 +52,17 @@ export default memo(function EditProfileSheet({
           <div className="flex justify-between items-center px-4 pb-3 pt-2 border-b border-zinc-800/60 bg-[#0a0d10]">
             <button onClick={onClose} className="text-white p-1.5 rounded-full hover:bg-zinc-800/60 active:scale-90 transition-all"><X className="w-5 h-5"/></button>
             <h2 className="font-bold text-base tracking-tight select-none pointer-events-none text-white">Edit Profile</h2>
-            <button onClick={onSave} className="text-[#4fa8ff] font-semibold text-sm active:scale-95 transition-transform px-1">Done</button>
+            <button
+  onClick={onSave}
+  disabled={!draftProfile.name.trim() || !draftProfile.username.trim() || usernameAvailable === false}
+  className={`text-sm transition-all px-1 ${
+    !draftProfile.name.trim() || !draftProfile.username.trim() || usernameAvailable === false
+      ? 'text-zinc-600 cursor-not-allowed'
+      : 'text-[#4fa8ff] font-semibold active:scale-95'
+  }`}
+>
+  Done
+</button>
           </div>
         </div>
         <div
@@ -84,37 +94,60 @@ export default memo(function EditProfileSheet({
             </div>
           )}
           <div className="relative group">
-            <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Name</label>
-            <input type="text" value={draftProfile.name} onChange={(e) => onDraftChange({ name: e.target.value })} className="w-full rounded-xl border border-slate-700/50 bg-[#1a2229]/80 px-4 pb-2 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] focus:border-[#4fa8ff]/60 focus:shadow-[0_0_20px_rgba(79,168,255,0.15)]" placeholder="Your name" />
-          </div>
+  <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Name</label>
+  <span className="absolute right-4 top-2 text-[10px] font-medium text-slate-500 group-focus-within:text-[#4fa8ff] transition-colors z-10">
+    {50 - (draftProfile.name?.length || 0)}
+  </span>
+  <input 
+    type="text" 
+    maxLength={50}
+    value={draftProfile.name} 
+    onChange={(e) => onDraftChange({ name: e.target.value })} 
+    className="w-full rounded-xl border border-slate-700/50 bg-[#1a2229]/80 px-4 pb-2 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] focus:border-[#4fa8ff]/60 focus:shadow-[0_0_20px_rgba(79,168,255,0.15)]" 
+    placeholder="Your name" 
+  />
+</div>
           
           <div className="relative group">
-            <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Username</label>
-            <input
-              type="text"
-              value={draftProfile.username}
-              onChange={(e) => onUsernameChange(e.target.value)}
-              onBlur={onUsernameBlur}
-              className={`w-full rounded-xl border bg-[#1a2229]/80 px-4 pb-2 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] pr-10 ${
-                usernameAvailable === false ? "border-red-500/80 focus:border-red-500/80" : "border-slate-700/50 focus:border-[#4fa8ff]/60"
-              }`}
-              placeholder="Username"
-            />
-            <div className="absolute right-4 top-4 z-20 flex items-center justify-center">
-              {isCheckingUsername ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-slate-200" />
-              ) : usernameAvailable === true ? (
-                <svg className="h-5 w-5 text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.6)] animate-slide-up" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
-              ) : usernameAvailable === false ? (
-                <svg className="h-5 w-5 text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.6)] animate-slide-up" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
-              ) : null}
-            </div>
-          </div>
+  <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Username</label>
+  <span className="absolute right-10 top-2 text-[10px] font-medium text-slate-500 group-focus-within:text-[#4fa8ff] transition-colors z-10">
+  {20 - (draftProfile.username?.length || 0)}
+</span>
+  <input
+    type="text"
+    maxLength={20}
+    value={draftProfile.username}
+    onChange={(e) => onUsernameChange(e.target.value)}
+    onBlur={onUsernameBlur}
+    className={`w-full rounded-xl border bg-[#1a2229]/80 px-4 pb-2 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] pr-10 ${
+      usernameAvailable === false ? "border-red-500/80 focus:border-red-500/80" : "border-slate-700/50 focus:border-[#4fa8ff]/60"
+    }`}
+    placeholder="Username"
+  />
+  <div className="absolute right-4 top-4 z-20 flex items-center justify-center">
+    {isCheckingUsername ? (
+      <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-500 border-t-slate-200" />
+    ) : usernameAvailable === true ? (
+      <svg className="h-5 w-5 text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.6)] animate-slide-up" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+    ) : usernameAvailable === false ? (
+      <svg className="h-5 w-5 text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.6)] animate-slide-up" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+    ) : null}
+  </div>
+</div>
 
           <div className="relative group">
-            <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Bio</label>
-            <textarea value={draftProfile.bio} onChange={(e) => onDraftChange({ bio: e.target.value })} className="w-full rounded-xl border border-slate-700/50 bg-[#1a2229]/80 px-4 pb-4 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] focus:border-[#4fa8ff]/60 focus:shadow-[0_0_20px_rgba(79,168,255,0.15)] resize-none h-28 leading-relaxed" placeholder="Write something about yourself..." />
-          </div>
+  <label className="absolute left-4 top-2 text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors z-10">Bio</label>
+  <span className="absolute right-4 top-2 text-[10px] font-medium text-slate-500 group-focus-within:text-[#4fa8ff] transition-colors z-10">
+    {160 - (draftProfile.bio?.length || 0)}
+  </span>
+  <textarea 
+    maxLength={160}
+    value={draftProfile.bio} 
+    onChange={(e) => onDraftChange({ bio: e.target.value })} 
+    className="w-full rounded-xl border border-slate-700/50 bg-[#1a2229]/80 px-4 pb-4 pt-6 text-sm text-slate-100 outline-none transition-all duration-300 focus:bg-[#1e2730] focus:border-[#4fa8ff]/60 focus:shadow-[0_0_20px_rgba(79,168,255,0.15)] resize-none h-28 leading-relaxed" 
+    placeholder="Write something about yourself..." 
+  />
+</div>
 
           <div className="relative group bg-[#1a2229]/80 rounded-xl p-4 border border-slate-700/50 space-y-3 transition-all duration-300 focus-within:border-[#4fa8ff]/60 focus-within:shadow-[0_0_20px_rgba(79,168,255,0.15)]">
             <label className="text-[11px] font-medium text-slate-400 group-focus-within:text-[#4fa8ff] transition-colors">
@@ -122,13 +155,14 @@ export default memo(function EditProfileSheet({
             </label>
             {draftProfile.websites.map((url, idx) => (
               <div key={idx} className="flex gap-2 items-center animate-slide-up">
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => onWebsiteChange(idx, e.target.value)}
-                  className="w-full rounded-lg bg-[#1e2730] px-3 py-2 text-sm text-[#4fa8ff] outline-none transition-all placeholder-slate-500"
-                  placeholder={idx === 0 ? "https://github.com/..." : "https://..."}
-                />
+               <input
+  type="text"
+  maxLength={100}
+  value={url}
+  onChange={(e) => onWebsiteChange(idx, e.target.value)}
+  className="w-full rounded-lg bg-[#1e2730] px-3 py-2 text-sm text-[#4fa8ff] outline-none transition-all placeholder-slate-500"
+  placeholder={idx === 0 ? "https://github.com/..." : "https://..."}
+/>
                 {draftProfile.websites.length > 1 && (
                   <button
                     type="button"

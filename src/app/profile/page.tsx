@@ -1,4 +1,5 @@
 "use client";
+import { useActiveRadar } from "@/hooks/useActiveRadar";
 
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSession, signOut } from "next-auth/react";
@@ -116,74 +117,115 @@ const ExpandableText = memo(function ExpandableText({ content }: { content: stri
 });
 
 /* ============================================================
-   IMAGE CAROUSEL - DECK SWIPE ARCHITECTURE
+   IMAGE CAROUSEL — FIXED DECK ANIMATION
    ============================================================ */
-const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: string[]; isNear: boolean; }) {
+
+const DROP_Y       = 44;
+const SCALE_STEP   = 0.06;
+const OPACITY_STEP = 0.40;
+const SNAP_VEL     = 0.30;
+const SNAP_DIST    = 0.20;
+const PULL_FACTOR  = 0.25;
+
+interface ImageCarouselProps {
+  images: string[];
+  isNear: boolean;
+}
+
+const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+
   const containerRef = useRef<HTMLDivElement>(null);
-  const slidesRef = useRef<(HTMLDivElement | null)[]>([]);
-  const activeRef = useRef(0);
-  const offsetRef = useRef(0);
+  const slidesRef    = useRef<(HTMLDivElement | null)[]>([]);
+  const widthRef     = useRef(375);
+  const rafRef       = useRef<number | null>(null);
 
   const g = useRef({
-    id: null as number | null,
-    x0: 0, y0: 0,
-    xLast: 0, tLast: 0,
-    vel: 0,
-    intent: null as 'h' | 'v' | null,
-    active: false,
+    pointerId:    null as number | null,
+    active:       false,
+    intent:       null as 'h' | 'v' | null,
+    startX:       0,
+    startY:       0,
+    lastX:        0,
+    lastTime:     0,
+    velocity:     0,
+    currentIndex: 0,
   });
 
-  const updateSlides = useCallback((offset: number, animate: boolean) => {
-    const W = containerRef.current?.clientWidth || 375;
-    const GAP = 12; 
-    const DROP_Y = 50; 
-    const currentFloatIndex = activeRef.current - (offset / W);
+  const imagesLenRef = useRef(images.length);
+  useEffect(() => { imagesLenRef.current = images.length; }, [images.length]);
 
+  useEffect(() => {
+    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
+  }, []);
+
+  // Uses percentages (d * 100%) instead of pixels so it is immune to layout shifts
+  const paintSlides = useCallback((floatIndex: number, animate: boolean) => {
     slidesRef.current.forEach((slide, i) => {
       if (!slide) return;
-      const d = i - currentFloatIndex;
-      if (Math.abs(d) > 2) {
+      const d = i - floatIndex;
+      const absD = Math.abs(d);
+
+      if (absD > 2.5) {
         slide.style.visibility = 'hidden';
         return;
       }
       slide.style.visibility = 'visible';
-      
-      const x = d * (W + GAP);
-      const y = Math.abs(d) * DROP_Y;
-      const s = 1 - Math.abs(d) * 0.05;
-      const o = 1 - Math.abs(d) * 0.3;
 
-      if (animate) {
-        slide.style.transition = 'transform 400ms cubic-bezier(0.22, 1, 0.36, 1), opacity 400ms ease';
-      } else {
-        slide.style.transition = 'none';
-      }
-      slide.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s})`;
-      slide.style.opacity = String(o);
+      const scale = 1 - absD * SCALE_STEP;
+      const opacity = Math.max(0, 1 - absD * OPACITY_STEP);
+
+      slide.style.transition = animate
+        ? 'transform 380ms cubic-bezier(0.22,1,0.36,1), opacity 380ms ease'
+        : 'none';
+      slide.style.transform  = `translate3d(${d * 100}%, ${absD * DROP_Y}px, 0) scale(${scale})`;
+      slide.style.opacity    = String(opacity);
     });
   }, []);
 
-  useEffect(() => {
-    updateSlides(0, false);
-  }, [updateSlides, images.length]);
+  const scheduleDragFrame = useCallback((offset: number) => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const floatIndex = g.current.currentIndex - offset / (widthRef.current || 375);
+      paintSlides(floatIndex, false);
+    });
+  }, [paintSlides]);
 
-  const onDown = useCallback((e: React.PointerEvent) => {
-    e.stopPropagation();
-    const s = g.current;
-    s.id = e.pointerId;
-    s.x0 = e.clientX; s.y0 = e.clientY;
-    s.xLast = e.clientX; s.tLast = performance.now();
-    s.vel = 0; s.intent = null; s.active = false;
-    offsetRef.current = 0;
+  const snapTo = useCallback((index: number) => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    const clamped = Math.max(0, Math.min(imagesLenRef.current - 1, index));
+    g.current.currentIndex = clamped;
+
+    rafRef.current = requestAnimationFrame(() => {
+      paintSlides(clamped, true);
+      setActiveIndex(clamped);
+    });
+  }, [paintSlides]);
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    if (g.current.pointerId !== null) return;
+    
+    // Only capture container width at the exact moment of touch. Bulletproof.
+    if (containerRef.current) {
+      widthRef.current = containerRef.current.clientWidth || 375;
+    }
+    
+    g.current.pointerId = e.pointerId;
+    g.current.active    = false;
+    g.current.intent    = null;
+    g.current.startX    = e.clientX;
+    g.current.startY    = e.clientY;
+    g.current.lastX     = e.clientX;
+    g.current.lastTime  = performance.now();
+    g.current.velocity  = 0;
   }, []);
 
-  const onMove = useCallback((e: React.PointerEvent) => {
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
     const s = g.current;
-    if (s.id !== e.pointerId) return;
+    if (s.pointerId !== e.pointerId) return;
 
-    const dx = e.clientX - s.x0;
-    const dy = e.clientY - s.y0;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
 
     if (!s.intent) {
       if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
@@ -191,68 +233,76 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
       if (s.intent === 'h') {
         e.currentTarget.setPointerCapture(e.pointerId);
         s.active = true;
+        // Re-anchor to absorb the 5px deadzone perfectly
+        s.startX = e.clientX;
+        s.lastX  = e.clientX;
       } else {
-        s.id = null;
+        s.pointerId = null;
         return;
       }
     }
 
     if (!s.active) return;
+
     const now = performance.now();
-    const dt = Math.max(now - s.tLast, 1);
-    s.vel = s.vel * 0.6 + ((e.clientX - s.xLast) / dt) * 0.4;
-    s.xLast = e.clientX;
-    s.tLast = now;
+    const dt  = Math.max(now - s.lastTime, 8);
+    s.velocity = s.velocity * 0.5 + ((e.clientX - s.lastX) / dt) * 0.5;
+    s.lastX    = e.clientX;
+    s.lastTime = now;
 
-    const W = containerRef.current?.clientWidth || 375;
-    const atStart = activeRef.current === 0;
-    const atEnd = activeRef.current === images.length - 1;
+    const W       = widthRef.current || 375;
+    const atStart = s.currentIndex === 0;
+    const atEnd   = s.currentIndex === imagesLenRef.current - 1;
 
-    let offset = dx;
-    if ((atStart && dx > 0) || (atEnd && dx < 0)) {
-      const pull = W * 0.28;
-      offset = Math.sign(dx) * pull * Math.tanh(Math.abs(dx) / pull);
+    let offset = e.clientX - s.startX;
+    if ((atStart && offset > 0) || (atEnd && offset < 0)) {
+      const pull = W * PULL_FACTOR;
+      offset = Math.sign(offset) * pull * Math.tanh(Math.abs(offset) / pull);
     }
-    offsetRef.current = offset;
-    updateSlides(offset, false);
-  }, [images.length, updateSlides]);
 
-  const onUp = useCallback((e: React.PointerEvent) => {
+    scheduleDragFrame(offset);
+  }, [scheduleDragFrame]);
+
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
     const s = g.current;
-    if (s.id !== e.pointerId || !s.active) { s.id = null; return; }
-    s.id = null; s.active = false;
+    if (s.pointerId !== e.pointerId || !s.active) {
+      s.pointerId = null;
+      return;
+    }
+    s.active    = false;
+    s.pointerId = null;
 
-    const dx = e.clientX - s.x0;
-    const W = containerRef.current?.clientWidth || 375;
-    const VEL_THRESHOLD = 0.35;
-    const DIST_THRESHOLD = W * 0.22;
+    const dx   = e.clientX - s.startX;
+    const W    = widthRef.current || 375;
+    let   next = s.currentIndex;
 
-    let next = activeRef.current;
-    if (s.vel < -VEL_THRESHOLD || dx < -DIST_THRESHOLD) {
-      next = Math.min(images.length - 1, next + 1);
-    } else if (s.vel > VEL_THRESHOLD || dx > DIST_THRESHOLD) {
+    if (s.velocity < -SNAP_VEL || dx < -(W * SNAP_DIST)) {
+      next = Math.min(imagesLenRef.current - 1, next + 1);
+    } else if (s.velocity > SNAP_VEL || dx > W * SNAP_DIST) {
       next = Math.max(0, next - 1);
     }
 
-    activeRef.current = next;
-    setActiveIndex(next);
-    updateSlides(0, true);
-  }, [images.length, updateSlides]);
+    snapTo(next);
+  }, [snapTo]);
 
-  const onCancel = useCallback(() => {
+  const onPointerCancel = useCallback(() => {
     const s = g.current;
-    s.id = null; s.active = false;
-    updateSlides(0, true);
-  }, [updateSlides]);
+    s.active    = false;
+    s.pointerId = null;
+    snapTo(s.currentIndex);
+  }, [snapTo]);
 
   if (images.length === 0) return null;
 
   if (images.length === 1) {
     return (
       <img
-        src={images[0]} alt="Post"
+        src={images[0]}
+        alt="Post"
         className="w-full h-auto object-cover max-h-[70vh] block"
-        loading={isNear ? 'eager' : 'lazy'} decoding="async" draggable={false}
+        loading={isNear ? 'eager' : 'lazy'}
+        decoding="async"
+        draggable={false}
         // @ts-ignore
         fetchPriority={isNear ? 'high' : 'auto'}
       />
@@ -262,40 +312,58 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: { images: 
   return (
     <div
       ref={containerRef}
-      className="relative w-full select-none bg-zinc-950 overflow-hidden touch-pan-y"
-      onPointerDown={onDown} onPointerMove={onMove}
-      onPointerUp={onUp} onPointerCancel={onCancel}
+      className="relative w-full select-none overflow-hidden bg-zinc-950"
+      style={{ touchAction: 'pan-y' }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <img
         src={images[0]}
-        className="w-full h-auto max-h-[70vh] opacity-0 pointer-events-none block"
+        className="w-full h-auto max-h-[70vh] opacity-0 pointer-events-none block select-none"
         aria-hidden="true"
+        draggable={false}
       />
       <div className="absolute inset-0">
-        {images.map((url, i) => (
-          <div
-            key={i}
-            ref={(el) => { slidesRef.current[i] = el; }}
-            className="absolute inset-0 w-full h-full flex justify-center items-center will-change-transform"
-          >
-            <img
-              src={url}
-              className="w-full h-full object-cover"
-              loading={Math.abs(i - activeIndex) <= 1 ? 'eager' : 'lazy'}
-              decoding="async"
-              draggable={false}
-            />
-          </div>
-        ))}
+        {images.map((url, i) => {
+          const d = i - activeIndex;
+          const absD = Math.abs(d);
+          
+          return (
+            <div
+              key={i}
+              ref={(el) => { slidesRef.current[i] = el; }}
+              className="absolute inset-0 w-full h-full flex justify-center items-center"
+              style={{
+                willChange: 'transform, opacity',
+                // Embedded directly to guarantee frame 1 is perfectly laid out via native CSS mapping
+                transform: `translate3d(${d * 100}%, ${absD * DROP_Y}px, 0) scale(${1 - absD * SCALE_STEP})`,
+                opacity: Math.max(0, 1 - absD * OPACITY_STEP),
+                visibility: absD > 2.5 ? 'hidden' : 'visible'
+              }}
+            >
+              <img
+                src={url}
+                alt={`Image ${i + 1} of ${images.length}`}
+                className="w-full h-full object-cover block select-none pointer-events-none"
+                loading={Math.abs(i - activeIndex) <= 1 ? 'eager' : 'lazy'}
+                decoding="async"
+                draggable={false}
+              />
+            </div>
+          );
+        })}
       </div>
-      <div className="absolute bottom-3 inset-x-0 flex justify-center items-center gap-[5px] pointer-events-none">
+      <div className="absolute bottom-3 inset-x-0 flex justify-center items-center gap-[5px] pointer-events-none z-10">
         {images.map((_, i) => (
           <div
             key={i}
             className="rounded-full bg-white transition-all duration-300 ease-out shadow-[0_1px_3px_rgba(0,0,0,0.5)]"
             style={{
-              width: i === activeIndex ? 18 : 6,
-              height: 6,
+              width:   i === activeIndex ? 18 : 6,
+              height:  6,
               opacity: i === activeIndex ? 1 : 0.4,
             }}
           />
@@ -314,9 +382,6 @@ const PostItem = memo(function PostItem({
   const images = parsePostImages(post);
   const isNear = currentIndex !== null && Math.abs(currentIndex - index) <= 1;
 
-  // FIX: Stripped all custom pointer event logic entirely.
-  // The Feed Modal will now rely entirely on smooth native scrolling.
-  // This physically prevents accidental touches from fighting the browser engine.
   return (
     <div
       ref={slideRef}
@@ -421,7 +486,7 @@ export default function ProfilePage() {
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [isPostsFetching, setIsPostsFetching] = useState(true);
 
-  // NEW POST STATE
+  // Create Post State
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [postContent, setPostContent] = useState("");
   const [draftPostFiles, setDraftPostFiles] = useState<File[]>([]);
@@ -429,10 +494,10 @@ export default function ProfilePage() {
   const [isPosting, setIsPosting] = useState(false);
   const postInputRef = useRef<HTMLInputElement>(null);
 
-  // POST OPTIONS MENU STATE
+  // Post Options Menu State
   const [postOptionsMenu, setPostOptionsMenu] = useState<any | null>(null);
 
-  // EDIT POST STATE
+  // Edit Post State
   const [isEditPostOpen, setIsEditPostOpen] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [existingUrls, setExistingUrls] = useState<string[]>([]);
@@ -519,21 +584,18 @@ export default function ProfilePage() {
 
   const userId = (session?.user as any)?.id;
 
-  // 1. Fetch Profile Data
   const { data: fetchedProfile, isLoading: isProfileLoading } = useQuery({
     queryKey: ['profile', userId],
     queryFn: () => getUserProfile(userId),
     enabled: !!userId,
   });
 
-  // 2. Fetch User Posts
   const { data: fetchedPosts, isLoading: isPostsLoading } = useQuery({
     queryKey: ['posts', userId],
     queryFn: () => getUserPosts(userId),
     enabled: !!userId,
   });
 
-  // 3. Sync cached data to local states
   useEffect(() => {
     if (fetchedProfile) {
       const formattedData = {
@@ -563,7 +625,8 @@ export default function ProfilePage() {
     }
   }, [fetchedPosts]);
 
-  // THIS LOGIC IS NOW STRICTLY FOR THE GRID, NEVER THE FEED
+  useActiveRadar(userId ? `user_id=eq.${userId}` : null, setUserPosts);
+
   const handlePointerDown = useCallback((e: React.PointerEvent, post: any) => {
     setPressedGridId(post.id);
     isDragging.current = false;
@@ -683,8 +746,8 @@ export default function ProfilePage() {
         setDraftPostPreviews(prev => [...prev, localPreviewUrl]);
         closeCropper();
       } else {
-        const publicId = `${cropType}_${Math.random().toString(36).substring(2, 10)}`;
-        const sig = await getCloudinarySignature(publicId, "nexus_uploads");
+        const targetFolder = cropType === 'avatar' ? 'nexus_pfps' : cropType === 'banner' ? 'nexus_banners' : 'nexus_posts';
+        const sig = await getCloudinarySignature(cropType, targetFolder);
         
         if (!sig.success) throw new Error(sig.error || "Signature generation failed");
 
@@ -694,7 +757,7 @@ export default function ProfilePage() {
         formData.append("timestamp", String(sig.timestamp));
         formData.append("signature", sig.signature!);
         formData.append("folder", sig.folder!);
-        formData.append("public_id", publicId);
+        formData.append("public_id", sig.publicId!);
 
         const cloudinaryResponse = await fetch(
           `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
@@ -729,27 +792,45 @@ export default function ProfilePage() {
       const uploadedUrls: string[] = [];
 
       for (const file of draftPostFiles) {
+        const sig = await getCloudinarySignature("post", "nexus_posts");
+        if (!sig.success) throw new Error(sig.error || "Signature generation failed");
+
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("upload_preset", "Sync-co");
-        const cloudinaryResponse = await fetch("https://api.cloudinary.com/v1_1/drdy6ktb6/image/upload", { method: "POST", body: formData });
+        formData.append("api_key", sig.apiKey!);
+        formData.append("timestamp", String(sig.timestamp));
+        formData.append("signature", sig.signature!);
+        formData.append("folder", sig.folder!);
+        formData.append("public_id", sig.publicId!);
+
+        const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body: formData });
         const data = await cloudinaryResponse.json();
         uploadedUrls.push(data.secure_url);
       }
 
       const result = await createPost(postContent, uploadedUrls);
+      
       if (result.success && result.post) {
-        setUserPosts(prev => [{
-          ...result.post,
-          users: { full_name: profileData.name, username: profileData.username, avatar_url: pfpUrl }
-        }, ...prev]);
         setPostContent("");
         setDraftPostFiles([]);
         setDraftPostPreviews([]);
         setIsCreatePostOpen(false);
+        
+        const newPost = {
+          ...result.post,
+          users: {
+            full_name: profileData.name,
+            username: profileData.username,
+            avatar_url: pfpUrl
+          }
+        };
+        setUserPosts(prev => [newPost, ...prev]);
+      } else {
+        alert("Database Error: " + result.error);
       }
     } catch (error) {
       console.error("Failed to post:", error);
+      alert("Network or Upload Error: " + (error as Error).message);
     } finally {
       setIsPosting(false);
     }
@@ -774,10 +855,18 @@ export default function ProfilePage() {
       const newlyUploadedUrls: string[] = [];
 
       for (const file of draftPostFiles) {
+        const sig = await getCloudinarySignature("post", "nexus_posts");
+        if (!sig.success) throw new Error(sig.error || "Signature generation failed");
+
         const formData = new FormData();
         formData.append("file", file);
-        formData.append("upload_preset", "Sync-co");
-        const cloudinaryResponse = await fetch("https://api.cloudinary.com/v1_1/drdy6ktb6/image/upload", { method: "POST", body: formData });
+        formData.append("api_key", sig.apiKey!);
+        formData.append("timestamp", String(sig.timestamp));
+        formData.append("signature", sig.signature!);
+        formData.append("folder", sig.folder!);
+        formData.append("public_id", sig.publicId!);
+
+        const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body: formData });
         const data = await cloudinaryResponse.json();
         newlyUploadedUrls.push(data.secure_url);
       }
@@ -829,10 +918,19 @@ export default function ProfilePage() {
   }, []);
 
   const handleSaveProfile = useCallback(async () => {
-    if (usernameAvailable === false) return;
-    
-    setSaveError("");
-    const result = await updateProfileData(draftProfile);
+  if (usernameAvailable === false) return;
+  
+  if (!draftProfile.name.trim()) {
+    setSaveError("Name cannot be empty.");
+    return;
+  }
+  if (draftProfile.username.trim().length < 3) {
+    setSaveError("Username must be at least 3 characters.");
+    return;
+  }
+  
+  setSaveError("");
+  const result = await updateProfileData(draftProfile);
     
     if (result.success) {
       setProfileData(draftProfile);
@@ -1059,8 +1157,6 @@ export default function ProfilePage() {
           {userPosts.map((post, i) => {
             const initialDist = Math.min(Math.abs((feedViewIndex || 0) - i), 1);
             return (
-              /* FIX: The PostItem inside the feed no longer receives handlePointerDown/Up events. */
-              /* It scrolls 100% natively without fighting the browser. */
               <PostItem
                 key={post.id} post={post} pfpUrl={pfpUrl} index={i} currentIndex={feedViewIndex}
                 slideRef={(el: HTMLDivElement | null) => { slideRefs.current[i] = el; }}
@@ -1193,7 +1289,6 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-[2px]">
-                  {/* FIX: The Grid handles the custom pointer touches correctly to open the feed. */}
                   {userPosts.map((post, index) => {
                     const postImages = parsePostImages(post);
                     return (

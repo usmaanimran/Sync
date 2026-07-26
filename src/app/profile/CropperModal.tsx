@@ -19,12 +19,12 @@ export default memo(function CropperModal({
   onDone: (croppedAreaPixels: any) => void;
   isProcessing?: boolean;
 }) {
-  // ISOLATED STATE: Moving these inside stops the main ProfilePage from re-rendering on drag!
+  // Isolate viewport state to prevent global re-renders during gesture interactions
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
 
-  // Reset viewport state when a new image is loaded
+  // Re-initialize zoom and crop vectors on active frame switch
   useEffect(() => {
     if (isOpen) {
       setCrop({ x: 0, y: 0 });
@@ -46,7 +46,7 @@ export default memo(function CropperModal({
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col pointer-events-auto select-none touch-none overflow-hidden">
-      {/* Header Bar */}
+      {/* Modal Title and Action Bar */}
       <div className="flex justify-between items-center p-4 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 z-10 shrink-0">
         <button
           onClick={onCancel}
@@ -78,7 +78,7 @@ export default memo(function CropperModal({
         </button>
       </div>
 
-      {/* Cropper Workspace */}
+      {/* Image Manipulation Canvas */}
       <div className="relative flex-1 bg-black w-full h-full touch-none overflow-hidden will-change-transform">
         {imageSrc && (
           <Cropper
@@ -98,14 +98,14 @@ export default memo(function CropperModal({
   objectFit="contain"
   style={{
     containerStyle: {
-      width: '100vw', // <-- Force strict viewport width to kill the gap
+      width: '100vw', // Override default container constraints for edge-to-edge layout
       height: '100%',
       backgroundColor: '#000',
       touchAction: 'none', 
     },
     cropAreaStyle: {
       border: '2px solid rgba(79, 168, 255, 0.8)',
-      // <-- Crank the box-shadow to 99999px to ensure it covers everything
+      // Generate synthetic overlay using extended box-shadow radius
       boxShadow: '0 0 0 99999px rgba(0, 0, 0, 0.85)', 
     },
   }}
@@ -113,7 +113,7 @@ export default memo(function CropperModal({
         )}
       </div>
 
-      {/* Manual Zoom Controls (Slider + Buttons for Desktop/Mobile) */}
+      {/* Viewport scale controls for fine adjustment */}
       <div className="p-4 bg-zinc-900/90 backdrop-blur-md border-t border-zinc-800 flex items-center justify-center gap-4 shrink-0 z-10">
         <button
           onClick={() => setZoom((z) => Math.max(1, z - 0.2))}

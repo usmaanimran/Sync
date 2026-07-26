@@ -8,15 +8,15 @@ export default memo(function CreatePostSheet({
   isOpen: boolean; drag: any; onClose: () => void;
   content: string; onContentChange: (val: string) => void;
   onChooseImage: () => void; 
-  postImageUrls: string[]; // Changed from string | null to string[]
-  onRemoveImage: (index: number) => void; // Now takes an index
+  postImageUrls: string[]; // Array of initialized local blob URLs for pending upload items
+  onRemoveImage: (index: number) => void; // Handler for removing specific drafts by index position
   onPost: () => void;
   isUploading: boolean; isPosting: boolean;
 }) {
   const isPostDisabled = (!content.trim() && postImageUrls.length === 0) || isPosting || isUploading;
   
   return (
-    <div className={`fixed inset-0 z-[60] flex flex-col justify-end overflow-hidden ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+    <div className={`fixed inset-0 z-[150] flex flex-col justify-end overflow-hidden ${isOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
       <div
         ref={drag.backdropRef}
         className="absolute inset-0 bg-black/70"
@@ -43,45 +43,44 @@ export default memo(function CreatePostSheet({
              className="w-full bg-transparent text-white outline-none resize-none text-lg placeholder-zinc-500 min-h-[120px]"
           />
           
-          {/* Horizontal Swiping for Draft Images */}
           {postImageUrls.length > 0 ? (
-  <div className="flex flex-col gap-4">
-    {/* Horizontal Swiping for Draft Images */}
-    <div className="flex gap-3 overflow-x-auto snap-x hide-scrollbar pb-2">
-      {postImageUrls.map((url, idx) => (
-        <div key={idx} className="relative w-[85%] flex-none snap-center rounded-2xl overflow-hidden border border-zinc-800">
-          <img src={url} alt={`Preview ${idx}`} className="w-full h-auto object-cover" />
-          <button onClick={() => onRemoveImage(idx)} className="absolute top-3 right-3 p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-red-500/80 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      ))}
-    </div>
-    
-    {/* Add More Button - Now underneath the images! */}
-    <button onClick={onChooseImage} className="flex items-center justify-center gap-2 w-full py-3.5 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-500 hover:border-[#4fa8ff] hover:text-[#4fa8ff] hover:bg-[#4fa8ff]/5 transition-all active:scale-[0.98]">
-      {isUploading ? (
-        <div className="w-5 h-5 border-2 border-[#4fa8ff] border-t-transparent rounded-full animate-spin" />
-      ) : (
-        <>
-          <Plus className="w-5 h-5" /> 
-          <span className="text-sm font-semibold">Add another image</span>
-        </>
-      )}
-    </button>
-  </div>
-) : (
-  <button onClick={onChooseImage} className="flex items-center justify-center gap-2 w-full py-10 border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-500 hover:border-[#4fa8ff] hover:text-[#4fa8ff] hover:bg-[#4fa8ff]/5 transition-all active:scale-[0.98]">
-    {isUploading ? (
-      <div className="w-6 h-6 border-2 border-[#4fa8ff] border-t-transparent rounded-full animate-spin" />
-    ) : (
-      <>
-        <ImageIcon className="w-6 h-6" /> 
-        <span className="font-semibold">Attach Media</span>
-      </>
-    )}
-  </button>
-)}
+            <>
+              {/* Horizontal scroll container for draft image previews */}
+              <div className="flex gap-3 overflow-x-auto snap-x hide-scrollbar pb-2">
+                {postImageUrls.map((url, idx) => (
+                  <div key={idx} className="relative w-[85%] flex-none snap-center rounded-2xl overflow-hidden border border-zinc-800">
+                    <img src={url} alt={`Preview ${idx}`} className="w-full h-auto object-cover" />
+                    <button onClick={() => onRemoveImage(idx)} className="absolute top-3 right-3 p-2 bg-black/60 backdrop-blur-md rounded-full text-white hover:bg-red-500/80 transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Appended selection button for additional media */}
+              <button onClick={onChooseImage} className="flex items-center justify-center gap-2 w-full py-3.5 border-2 border-dashed border-zinc-800 rounded-xl text-zinc-500 hover:border-[#4fa8ff] hover:text-[#4fa8ff] hover:bg-[#4fa8ff]/5 transition-all active:scale-[0.98]">
+                {isUploading ? (
+                  <div className="w-5 h-5 border-2 border-[#4fa8ff] border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Plus className="w-5 h-5" /> 
+                    <span className="text-sm font-semibold">Add another image</span>
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <button onClick={onChooseImage} className="flex items-center justify-center gap-2 w-full py-10 border-2 border-dashed border-zinc-800 rounded-2xl text-zinc-500 hover:border-[#4fa8ff] hover:text-[#4fa8ff] hover:bg-[#4fa8ff]/5 transition-all active:scale-[0.98]">
+              {isUploading ? (
+                <div className="w-6 h-6 border-2 border-[#4fa8ff] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <ImageIcon className="w-6 h-6" /> 
+                  <span className="font-semibold">Attach Media</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

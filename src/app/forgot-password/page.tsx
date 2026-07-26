@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { requestPasswordReset, resetPassword } from "../actions/auth";
 
-// Reusing your sleek FloatingInput component style
+// Reusable UI components
 const FloatingInput = ({ label, type, value, onChange, disabled, hasError, shakeTrigger, delay, rightElement }: any) => (
   <div 
     className={`relative w-full opacity-0 animate-slide-up ${hasError && shakeTrigger ? "animate-shake" : ""}`}
@@ -34,7 +34,7 @@ const FloatingInput = ({ label, type, value, onChange, disabled, hasError, shake
 export default function PasswordResetPage() {
   const router = useRouter();
 
-  // Flow State: 1 = Enter Email, 2 = Enter Code & New Password
+  // Flow state control (1 = Email, 2 = OTP & Password)
   const [step, setStep] = useState(1);
   
   // Form State
@@ -57,11 +57,11 @@ export default function PasswordResetPage() {
 
   const handleBack = () => {
     if (step === 2) {
-      // If on the code step, just go back to the email input
+      // Revert to email collection step
       setStep(1);
       setError("");
     } else {
-      // If already on the email step, go back to login
+      // Return to authentication entry
       router.push("/login");
     }
   };
@@ -112,7 +112,7 @@ export default function PasswordResetPage() {
       const result = await resetPassword(email, otp, password);
       
       if (result.success) {
-        // Silently route them back to the login page with a success flag
+        // Redirect to login with success flag for toast display
         router.push("/login?reset=success");
       } else {
         triggerError(result.error || "Failed to reset password.");

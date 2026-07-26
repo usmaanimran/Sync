@@ -25,8 +25,7 @@ export default async function getCroppedImg(
   let scale = 1;
   if (pixelCrop.width > MAX_WIDTH) {
     scale = MAX_WIDTH / pixelCrop.width;
-  }
-
+  } 
   // 3. Set the canvas to the new optimized dimensions
   const finalWidth = Math.floor(pixelCrop.width * scale);
   const finalHeight = Math.floor(pixelCrop.height * scale);

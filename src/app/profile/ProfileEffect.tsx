@@ -10,7 +10,7 @@ export default function ProfileEffect({ effectType }: ProfileEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isIntense, setIsIntense] = useState(true);
 
-  // Handles the Discord-style transition from intense to subtle
+  // Manage transition from high-intensity load state to ambient background
   useEffect(() => {
     setIsIntense(true);
     const timer = setTimeout(() => {
@@ -20,7 +20,7 @@ export default function ProfileEffect({ effectType }: ProfileEffectProps) {
     return () => clearTimeout(timer);
   }, [effectType]);
 
-  // Canvas / WebGL Animation Logic
+  // Initialize and animate Canvas API context for matrix effect
   useEffect(() => {
     if (effectType !== 'matrix' || !canvasRef.current) return;
     
@@ -37,7 +37,7 @@ export default function ProfileEffect({ effectType }: ProfileEffectProps) {
     const drops = Array(Math.floor(columns)).fill(1);
 
     const draw = () => {
-      // Background fade for the trailing effect
+      // Apply progressive alpha masking for trailing motion blur
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
@@ -85,7 +85,7 @@ export default function ProfileEffect({ effectType }: ProfileEffectProps) {
         ref={canvasRef}
         className="w-full h-full object-cover opacity-60"
       />
-      {/* The absolute gradient div is completely gone. The CSS mask handles it flawlessly now. */}
+      {/* Gradient overlay relies entirely on CSS masking for optimal compositing */}
     </div>
   );
 }

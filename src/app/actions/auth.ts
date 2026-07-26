@@ -1,10 +1,7 @@
 "use server";
 
-// ─── SEC-02 FIX ────────────────────────────────────────────────────────────
-// Import Node.js native crypto module for CSPRNG-backed OTP generation.
-// Math.random() is a seeded PRNG and is predictable; crypto.randomInt() is not.
 import crypto from "crypto";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { Ratelimit } from "@upstash/ratelimit";
@@ -13,24 +10,21 @@ import { headers } from "next/headers";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! 
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 🛡️ CYBERSECURITY: Edge Rate Limiter configuration via Upstash Redis
-// Defends auth endpoints against high-velocity automated botnets & script attacks
 const authRateLimiter = new Ratelimit({
   redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(5, "60 s"), // Strict threshold: 5 operations per minute per IP
+  limiter: Ratelimit.slidingWindow(5, "60 s"),
   analytics: true,
   prefix: "@upstash/ratelimit/nexus_auth",
 });
 
-// Helper utility to enforce rate limits per client IP address
 async function assertRateLimit(actionName: string) {
   const headerList = await headers();
-  const ip = headerList.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+  const ip = headerList.get("x-real-ip") || headerList.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
   const { success } = await authRateLimiter.limit(`${actionName}_${ip}`);
   
   if (!success) {
@@ -38,11 +32,6 @@ async function assertRateLimit(actionName: string) {
   }
 }
 
-// 1. THE 4-TIER FAILOVER EMAIL ENGINE
-// ─── SEC-06 FIX ────────────────────────────────────────────────────────────
-// Removed the hardcoded `throw new Error("Bypassing Brevo for local testing")`
-// dead-code bypass that was permanently skipping the Brevo primary provider.
-// The failover chain now executes as designed: Brevo → Resend → Sender → CloudMailin.
 async function sendVerificationEmail(email: string, otp: string) {
   const emailSubject = "Verify your Nexus Account";
   const senderEmail = "onboarding@resend.dev"; 
@@ -72,10 +61,9 @@ async function sendVerificationEmail(email: string, otp: string) {
 
     if (!brevoResponse.ok) throw new Error("Brevo failed.");
     return { success: true, provider: "brevo" };
-
   } catch (brevoError) {
     console.warn("Brevo failover engaged. Routing to Resend...");
-
+    
     try {
       const { error: resendError } = await resend.emails.send({
         from: `${senderName} <${senderEmail}>`,
@@ -86,10 +74,9 @@ async function sendVerificationEmail(email: string, otp: string) {
 
       if (resendError) throw new Error("Resend failed.");
       return { success: true, provider: "resend" };
-
     } catch (resendError) {
       console.warn("Resend failover engaged. Routing to Sender...");
-
+      
       try {
         const senderResponse = await fetch("https://api.sender.net/v2/message/send", {
           method: "POST",
@@ -108,10 +95,9 @@ async function sendVerificationEmail(email: string, otp: string) {
 
         if (!senderResponse.ok) throw new Error("Sender failed.");
         return { success: true, provider: "sender" };
-
       } catch (senderError) {
         console.warn("Sender failover engaged. Deploying CloudMailin...");
-
+        
         const cloudmailinResponse = await fetch(`https://api.cloudmailin.com/api/v0.1/${process.env.CLOUDMAILIN_USERNAME}/messages`, {
           method: "POST",
           headers: {
@@ -130,14 +116,16 @@ async function sendVerificationEmail(email: string, otp: string) {
            console.error("CRITICAL SECURITY MONITOR: Complete email infrastructure outage detected.");
            return { success: false, error: "Complete email engine failure." };
         }
+        
         return { success: true, provider: "cloudmailin" };
       }
     }
   }
 }
 
-// 2. REAL USERNAME CHECK DIRECT FROM DATABASE
 export async function isUsernameAvailable(username: string) {
+  await assertRateLimit("check_username");
+
   const { data: user, error } = await supabase
     .from("users")
     .select("is_verified, token_expiry")
@@ -146,6 +134,7 @@ export async function isUsernameAvailable(username: string) {
 
   if (error) return false;
   if (!user) return true; 
+
   if (user.is_verified) return false;
 
   const now = new Date();
@@ -155,9 +144,7 @@ export async function isUsernameAvailable(username: string) {
   return false; 
 }
 
-// 3. REGISTER USER ACTION
 export async function registerUser(formData: FormData) {
-  // DDoS Mitigation check
   await assertRateLimit("register");
 
   const email = formData.get("email") as string;
@@ -174,7 +161,6 @@ export async function registerUser(formData: FormData) {
   const cleanUsername = username.toLowerCase().trim();
   const now = new Date();
 
-  // 🧹 1. SWEEP THE USERNAME
   const { data: existingUsername } = await supabase
     .from("users")
     .select("id, email, is_verified, token_expiry")
@@ -185,19 +171,16 @@ export async function registerUser(formData: FormData) {
     if (existingUsername.is_verified) {
       throw new Error("This username is already permanently taken.");
     }
-
     const expiryDate = new Date(existingUsername.token_expiry);
     
     if (now < expiryDate && existingUsername.email !== cleanEmail) {
       throw new Error("This username is currently pending verification. Try again later.");
-    } 
-    
+    }
     if (now >= expiryDate) {
       await supabase.from("users").delete().eq("id", existingUsername.id);
     }
   }
 
-  // 🧹 2. CHECK THE EMAIL & PREVENT OVERWRITE HIJACKING
   const { data: existingEmail } = await supabase
     .from("users")
     .select("id, is_verified, token_expiry")
@@ -208,8 +191,7 @@ export async function registerUser(formData: FormData) {
     if (existingEmail.is_verified) {
       throw new Error("This email is already registered.");
     }
-
-    // ⚔️ CYBERSECURITY FIX: Protect active, unverified registration states from account takeover attempts
+    
     const originalExpiry = new Date(existingEmail.token_expiry);
     if (now < originalExpiry) {
       throw new Error("An active registration setup is already pending for this email address. Please try again when the 15-minute window expires.");
@@ -217,14 +199,9 @@ export async function registerUser(formData: FormData) {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  // ─── SEC-02 FIX ──────────────────────────────────────────────────────────
-  // crypto.randomInt(100000, 1000000) uses a CSPRNG (cryptographically secure
-  // pseudorandom number generator). Unlike Math.random(), it is not seeded
-  // from a predictable state and its output cannot be reverse-engineered.
   const otp = crypto.randomInt(100000, 1000000).toString();
   const otpExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-  // 🔄 3. INSERT OR EXPIRED-OVERWRITE
   if (existingEmail && !existingEmail.is_verified) {
     const { error: updateError } = await supabase
       .from("users")
@@ -235,7 +212,7 @@ export async function registerUser(formData: FormData) {
         birthday: birthday,
         verification_token: otp,
         token_expiry: otpExpiry,
-        failed_otp_attempts: 0 // Reset brute force counter on hard retry
+        failed_otp_attempts: 0 
       })
       .eq("id", existingEmail.id);
 
@@ -250,8 +227,8 @@ export async function registerUser(formData: FormData) {
           full_name: fullName,
           username: cleanUsername,
           birthday: birthday,
-          is_verified: false, 
-          verification_token: otp, 
+          is_verified: false,
+          verification_token: otp,
           token_expiry: otpExpiry,
           failed_otp_attempts: 0
         }
@@ -261,14 +238,12 @@ export async function registerUser(formData: FormData) {
   }
 
   await sendVerificationEmail(cleanEmail, otp);
-
   return { success: true, email: cleanEmail };
 }
 
-// 4. VERIFY OTP ACTION
 export async function verifyUserEmail(email: string, otp: string) {
   await assertRateLimit("verify_otp");
-
+  
   const cleanEmail = email.toLowerCase().trim();
 
   const { data: user, error: fetchError } = await supabase
@@ -285,16 +260,10 @@ export async function verifyUserEmail(email: string, otp: string) {
     return { success: false, error: "Account is already verified." };
   }
 
-  // 🛡️ CYBERSECURITY FIX: Brute-Force Shield logic
-  // Automatically self-destructs authorization tokens upon reaching 5 invalid attempts
   if (user.failed_otp_attempts >= 5) {
     return { success: false, error: "Maximum verification validation attempts exceeded. Request a new token." };
   }
 
-  // ─── SEC-10 FIX ──────────────────────────────────────────────────────────
-  // Expiry is now checked BEFORE token comparison.
-  // Previously, a valid-but-expired OTP could pass the token check and return
-  // success. Checking expiry first closes this window entirely.
   if (new Date() > new Date(user.token_expiry)) {
     return { success: false, error: "Verification code has expired. Please request a new one." };
   }
@@ -303,7 +272,6 @@ export async function verifyUserEmail(email: string, otp: string) {
     const freshAttempts = (user.failed_otp_attempts || 0) + 1;
     
     if (freshAttempts >= 5) {
-      // Annihilate the token state immediately
       await supabase.from("users").update({ 
         verification_token: null, 
         token_expiry: null,
@@ -313,12 +281,11 @@ export async function verifyUserEmail(email: string, otp: string) {
       return { success: false, error: "Too many failed attempts. Code locked out. Please request a new code." };
     }
 
-    // Record the incremented failed attempt back to the cloud database record
     await supabase.from("users").update({ failed_otp_attempts: freshAttempts }).eq("email", cleanEmail);
+    
     return { success: false, error: `Invalid verification code. ${5 - freshAttempts} attempts remaining.` };
   }
 
-  // Authorize completely and clear structural tokens out of the table row
   const { error: updateError } = await supabase
     .from("users")
     .update({ 
@@ -330,24 +297,16 @@ export async function verifyUserEmail(email: string, otp: string) {
     .eq("email", cleanEmail);
 
   if (updateError) return { success: false, error: "Internal session creation fault." };
-
   return { success: true };
 }
 
-// 5. RESEND OTP ACTION
 export async function resendVerificationCode(email: string) {
   await assertRateLimit("resend_otp");
-
+  
   const cleanEmail = email.toLowerCase().trim();
-  // ─── SEC-02 FIX ──────────────────────────────────────────────────────────
   const newOtp = crypto.randomInt(100000, 1000000).toString();
   const newOtpExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
-  // ─── SEC-05 FIX ──────────────────────────────────────────────────────────
-  // `failed_otp_attempts` is intentionally NOT reset here.
-  // Resetting it allowed an attacker to loop: fail 4 times → resend → fail 4
-  // more → repeat indefinitely, bypassing the 5-attempt lockout.
-  // The failure counter must persist across resend requests.
   const { error } = await supabase
     .from("users")
     .update({ 
@@ -359,12 +318,13 @@ export async function resendVerificationCode(email: string) {
   if (error) return { success: false, error: "Token mutation failed." };
 
   await sendVerificationEmail(cleanEmail, newOtp);
+  
   return { success: true };
 }
 
-// 6. REQUEST PASSWORD RESET
 export async function requestPasswordReset(email: string) {
   await assertRateLimit("request_reset");
+
   const cleanEmail = email.toLowerCase().trim();
 
   const { data: user } = await supabase
@@ -373,10 +333,8 @@ export async function requestPasswordReset(email: string) {
     .eq("email", cleanEmail)
     .maybeSingle();
 
-  // Return blind success message to prevent user enumeration discovery
   if (!user) return { success: true };
 
-  // ─── SEC-02 FIX ──────────────────────────────────────────────────────────
   const otp = crypto.randomInt(100000, 1000000).toString();
   const otpExpiry = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
@@ -390,12 +348,13 @@ export async function requestPasswordReset(email: string) {
     .eq("id", user.id);
 
   await sendVerificationEmail(cleanEmail, otp);
+
   return { success: true };
 }
 
-// 7. EXECUTE PASSWORD RESET
 export async function resetPassword(email: string, otp: string, newPassword: string) {
   await assertRateLimit("execute_reset");
+
   const cleanEmail = email.toLowerCase().trim();
 
   const { data: user, error: fetchError } = await supabase
@@ -407,8 +366,6 @@ export async function resetPassword(email: string, otp: string, newPassword: str
   if (fetchError || !user) return { success: false, error: "Invalid context operational scope." };
   if (user.failed_otp_attempts >= 5) return { success: false, error: "Token locked out due to abuse." };
 
-  // ─── SEC-10 FIX ──────────────────────────────────────────────────────────
-  // Expiry is checked BEFORE token comparison to prevent expired-token acceptance.
   if (new Date() > new Date(user.token_expiry)) {
     return { success: false, error: "Code lifecycle has expired." };
   }
@@ -419,6 +376,7 @@ export async function resetPassword(email: string, otp: string, newPassword: str
       await supabase.from("users").update({ verification_token: null, token_expiry: null, failed_otp_attempts: 5 }).eq("id", user.id);
       return { success: false, error: "Too many failed invalid verification entry executions. Token self-destructed." };
     }
+
     await supabase.from("users").update({ failed_otp_attempts: freshAttempts }).eq("id", user.id);
     return { success: false, error: "Invalid verification authorization key." };
   }

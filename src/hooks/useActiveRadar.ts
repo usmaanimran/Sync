@@ -1,12 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { supabaseClient } from "@/utils/supabaseClient";
 
 export function useActiveRadar(
   filterString: string | null | undefined,
-  setPosts: React.Dispatch<React.SetStateAction<any[]>>
+  setPosts: React.Dispatch<React.SetStateAction<any[]>>,
+  syncCallback?: () => void 
 ) {
+  // Track if this is a reconnection vs initial load
+  const hasConnectedOnce = useRef(false);
+
   useEffect(() => {
-    // Safely exit if filter string is not yet available
     if (!filterString) return;
 
     const channel = supabaseClient
@@ -56,10 +59,20 @@ export function useActiveRadar(
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Listen for connection status changes
+        if (status === "SUBSCRIBED") {
+          // If we connected, lost connection, and just got it back: fire the Re-Sync 
+          if (hasConnectedOnce.current && syncCallback) {
+            console.log("Radar Reconnected: Fetching missed beacons...");
+            syncCallback();
+          }
+          hasConnectedOnce.current = true;
+        }
+      });
 
     return () => {
       supabaseClient.removeChannel(channel);
     };
-  }, [filterString, setPosts]);
+  }, [filterString, setPosts, syncCallback]); 
 }

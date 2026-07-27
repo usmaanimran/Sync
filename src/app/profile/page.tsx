@@ -1,5 +1,4 @@
 "use client";
-import { useActiveRadar } from "@/hooks/useActiveRadar";
 
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSession, signOut } from "next-auth/react";
@@ -590,11 +589,12 @@ export default function ProfilePage() {
     enabled: !!userId,
   });
 
-  const { data: fetchedPosts, isLoading: isPostsLoading } = useQuery({
+  const { data: fetchedPosts, isLoading: isPostsLoading, refetch } = useQuery({
     queryKey: ['posts', userId],
     queryFn: () => getUserPosts(userId),
     enabled: !!userId,
   });
+
 
   useEffect(() => {
     if (fetchedProfile) {
@@ -625,7 +625,6 @@ export default function ProfilePage() {
     }
   }, [fetchedPosts]);
 
-  useActiveRadar(userId ? `user_id=eq.${userId}` : null, setUserPosts);
 
   const handlePointerDown = useCallback((e: React.PointerEvent, post: any) => {
     setPressedGridId(post.id);

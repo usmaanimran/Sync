@@ -1,6 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { useSession, signOut } from "next-auth/react";
+import React, { useState, useRef, useEffect, useCallback, memo, Suspense } from 'react';import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import getCroppedImg from '@/utils/cropImage';
@@ -27,6 +26,19 @@ import {
   Settings, Grid, FolderGit2, CheckCircle2,
   Link as LinkIcon, Cpu, Crown, Heart, MessageSquare, Send, ChevronLeft, MoreHorizontal, PlusSquare, Trash2, Edit2
 } from 'lucide-react';
+
+ export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-black flex items-center justify-center overflow-x-hidden">
+        <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <ProfileContent />
+    </Suspense>
+  );
+}
+
 
 /* ============================================================
    LIKERS TEXT (Overlapping UI)
@@ -499,11 +511,10 @@ const PostItem = memo(function PostItem({
 /* ============================================================
    MAIN PROFILE PAGE
    ============================================================ */
-export default function ProfilePage() {
+function ProfileContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const [pressedGridId, setPressedGridId] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isProfileFetching, setIsProfileFetching] = useState(true);

@@ -181,36 +181,43 @@ export async function deletePost(postId: string, urlsToDelete: string[]) {
 export async function getUserPosts(userId: string) {
   if (!userId) return [];
 
-  const getCachedPosts = unstable_cache(
-    async () => {
-      const { data, error } = await supabase
-        .from("posts")
-        .select(`
-          id,
-          content,
-          image_url,
-          created_at,
-          users!inner (
-            full_name,
-            username,
-            avatar_url
-          )
-        `)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+  const session = await getServerSession(authOptions);
+  const currentUserId = session?.user?.id;
 
-      if (error) {
-        console.error("Failed to fetch posts:", error);
-        return [];
-      }
-      return data;
-    },
-    [`posts-${userId}`], 
-    {
-      tags: [`posts-${userId}`],
-      revalidate: 3600
-    }
-  );
+  const { data, error } = await supabase
+  .from("posts")
+  .select(`
+    id,
+    content,
+    image_url,
+    created_at,
+    user_id,
+    users!inner (
+      full_name,
+      username,
+      avatar_url
+    ),
+    post_likes ( user_id, users ( username, avatar_url ) )
+  `)
+  .eq("user_id", userId)
+  .order("created_at", { ascending: false });
 
-  return getCachedPosts();
+  if (error) {
+    console.error("Failed to fetch posts:", error);
+    return [];
+  }
+
+  // Map likes dynamically for the current viewer to keep state in sync
+  return data.map((post: any) => {
+  const hasLiked = post.post_likes?.some((like: any) => like.user_id === currentUserId) || false;
+  const likeCount = post.post_likes?.length || 0;
+  
+  // Extract usernames and avatars
+  const likers = post.post_likes?.map((like: any) => ({
+    username: like.users?.username,
+    avatar_url: like.users?.avatar_url
+  })).filter((l: any) => l.username) || [];
+
+  return { ...post, hasLiked, likeCount, likers };
+});
 }

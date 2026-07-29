@@ -1,14 +1,12 @@
 "use client";
-
 import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import getCroppedImg from '@/utils/cropImage';
 import { updateAvatarUrl, updateBannerUrl, getUserProfile, updateProfileData, updateProfileEffect } from "../actions/profile";
 import { isUsernameAvailable } from "../actions/auth";
 import { createPost, getUserPosts, updatePost, deletePost } from "../actions/post";
-
 import ProfileEffect from './ProfileEffect';
 import RankHUD from './RankHUD';
 import CropperModal from './CropperModal';
@@ -19,13 +17,69 @@ import AvatarMenuSheet from './AvatarMenuSheet';
 import BannerMenuSheet from './BannerMenuSheet';
 import CustomizeSheet from './CustomizeSheet';
 import useSheetDrag from './useSheetDrag';
+import CommentSheet from '../home/CommentSheet';
+import LikesSheet from '../home/LikesSheet';
 import { ProfileDraft } from './types';
 import { getCloudinarySignature } from '../actions/cloudinary';
 import { timeAgo, RANK_TIERS, generateDefaultAvatar, generateDefaultBanner } from './helpers';
+import { toggleLike } from "../actions/engagement";
 import {
   Settings, Grid, FolderGit2, CheckCircle2,
-  Link as LinkIcon, Cpu, Crown, Zap, MessageSquare, Send, ChevronLeft, MoreHorizontal, PlusSquare, Trash2, Edit2
+  Link as LinkIcon, Cpu, Crown, Heart, MessageSquare, Send, ChevronLeft, MoreHorizontal, PlusSquare, Trash2, Edit2
 } from 'lucide-react';
+
+/* ============================================================
+   LIKERS TEXT (Overlapping UI)
+   ============================================================ */
+const LikersText = ({ likers, isOwner, onClick }: { likers: any[], isOwner?: boolean, onClick: () => void }) => {
+  // Completely hide this if the user doesn't own the post or if there are 0 likes
+  if (isOwner === false || !likers || likers.length === 0) return null;
+
+  // Backwards compatibility mapper just in case it receives raw strings
+  const formattedLikers = likers.map(liker => {
+    if (typeof liker === 'string') return { username: liker, avatar_url: null };
+    return liker;
+  });
+
+  let text = "";
+  if (formattedLikers.length === 1) text = `Liked by ${formattedLikers[0].username}`;
+  else if (formattedLikers.length === 2) text = `Liked by ${formattedLikers[0].username} and ${formattedLikers[1].username}`;
+  else text = `Liked by ${formattedLikers[0].username}, ${formattedLikers[1].username} and ${formattedLikers.length - 2} others`;
+
+  return (
+    <div 
+      className="px-4 text-[12px] text-zinc-400 font-medium -mt-1 mb-2 flex items-center gap-2 cursor-pointer hover:text-zinc-300 transition-colors"
+      onClick={onClick}
+    >
+      {/* Overlapping Avatars Container */}
+      <div className={`relative shrink-0 flex items-center justify-center ${formattedLikers.length === 1 ? 'w-5 h-5' : 'w-7 h-7'}`}>
+        {formattedLikers.length === 1 ? (
+          <img 
+            src={formattedLikers[0].avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${formattedLikers[0].username}&backgroundColor=ffffff`} 
+            className="w-5 h-5 rounded-full object-cover" 
+            alt="avatar"
+          />
+        ) : (
+          <>
+            {/* Back Avatar (Top Left) */}
+            <img 
+              src={formattedLikers[0].avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${formattedLikers[0].username}&backgroundColor=ffffff`} 
+              className="w-5 h-5 rounded-full object-cover absolute top-0 left-0 z-0" 
+              alt="avatar"
+            />
+            {/* Front Avatar (Bottom Right with border cutout) */}
+            <img 
+              src={formattedLikers[1].avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${formattedLikers[1].username}&backgroundColor=ffffff`} 
+              className="w-5 h-5 rounded-full object-cover absolute bottom-0 right-0 border-2 border-black z-10" 
+              alt="avatar"
+            />
+          </>
+        )}
+      </div>
+      <span>{text}</span>
+    </div>
+  );
+};
 
 /* ============================================================
    POST IMAGES PARSER HELPER
@@ -33,7 +87,6 @@ import {
 const parsePostImages = (post: any) => {
   const rawData = post.image_urls || post.image_url;
   if (!rawData) return [];
-
   let parsedArray = [];
   if (Array.isArray(rawData)) {
     parsedArray = rawData;
@@ -53,7 +106,6 @@ const parsePostImages = (post: any) => {
       }
     }
   }
-
   return parsedArray
     .map((url: any) => {
       if (typeof url !== 'string') return '';
@@ -116,9 +168,8 @@ const ExpandableText = memo(function ExpandableText({ content }: { content: stri
 });
 
 /* ============================================================
-   IMAGE CAROUSEL — FIXED DECK ANIMATION
+   IMAGE CAROUSEL FIXED DECK ANIMATION
    ============================================================ */
-
 const DROP_Y       = 44;
 const SCALE_STEP   = 0.06;
 const OPACITY_STEP = 0.40;
@@ -133,12 +184,10 @@ interface ImageCarouselProps {
 
 const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const slidesRef    = useRef<(HTMLDivElement | null)[]>([]);
   const widthRef     = useRef(375);
   const rafRef       = useRef<number | null>(null);
-
   const g = useRef({
     pointerId:    null as number | null,
     active:       false,
@@ -150,30 +199,25 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
     velocity:     0,
     currentIndex: 0,
   });
-
   const imagesLenRef = useRef(images.length);
+  
   useEffect(() => { imagesLenRef.current = images.length; }, [images.length]);
-
   useEffect(() => {
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
   }, []);
 
-  // Uses percentages (d * 100%) instead of pixels so it is immune to layout shifts
   const paintSlides = useCallback((floatIndex: number, animate: boolean) => {
     slidesRef.current.forEach((slide, i) => {
       if (!slide) return;
       const d = i - floatIndex;
       const absD = Math.abs(d);
-
       if (absD > 2.5) {
         slide.style.visibility = 'hidden';
         return;
       }
       slide.style.visibility = 'visible';
-
       const scale = 1 - absD * SCALE_STEP;
       const opacity = Math.max(0, 1 - absD * OPACITY_STEP);
-
       slide.style.transition = animate
         ? 'transform 380ms cubic-bezier(0.22,1,0.36,1), opacity 380ms ease'
         : 'none';
@@ -194,7 +238,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     const clamped = Math.max(0, Math.min(imagesLenRef.current - 1, index));
     g.current.currentIndex = clamped;
-
     rafRef.current = requestAnimationFrame(() => {
       paintSlides(clamped, true);
       setActiveIndex(clamped);
@@ -203,12 +246,7 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (g.current.pointerId !== null) return;
-    
-    // Only capture container width at the exact moment of touch. Bulletproof.
-    if (containerRef.current) {
-      widthRef.current = containerRef.current.clientWidth || 375;
-    }
-    
+    if (containerRef.current) widthRef.current = containerRef.current.clientWidth || 375;
     g.current.pointerId = e.pointerId;
     g.current.active    = false;
     g.current.intent    = null;
@@ -222,17 +260,14 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const s = g.current;
     if (s.pointerId !== e.pointerId) return;
-
     const dx = e.clientX - s.startX;
     const dy = e.clientY - s.startY;
-
     if (!s.intent) {
       if (Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
       s.intent = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
       if (s.intent === 'h') {
         e.currentTarget.setPointerCapture(e.pointerId);
         s.active = true;
-        // Re-anchor to absorb the 5px deadzone perfectly
         s.startX = e.clientX;
         s.lastX  = e.clientX;
       } else {
@@ -240,25 +275,20 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
         return;
       }
     }
-
     if (!s.active) return;
-
     const now = performance.now();
     const dt  = Math.max(now - s.lastTime, 8);
     s.velocity = s.velocity * 0.5 + ((e.clientX - s.lastX) / dt) * 0.5;
     s.lastX    = e.clientX;
     s.lastTime = now;
-
     const W       = widthRef.current || 375;
     const atStart = s.currentIndex === 0;
     const atEnd   = s.currentIndex === imagesLenRef.current - 1;
-
     let offset = e.clientX - s.startX;
     if ((atStart && offset > 0) || (atEnd && offset < 0)) {
       const pull = W * PULL_FACTOR;
       offset = Math.sign(offset) * pull * Math.tanh(Math.abs(offset) / pull);
     }
-
     scheduleDragFrame(offset);
   }, [scheduleDragFrame]);
 
@@ -270,17 +300,14 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
     }
     s.active    = false;
     s.pointerId = null;
-
     const dx   = e.clientX - s.startX;
     const W    = widthRef.current || 375;
     let   next = s.currentIndex;
-
     if (s.velocity < -SNAP_VEL || dx < -(W * SNAP_DIST)) {
       next = Math.min(imagesLenRef.current - 1, next + 1);
     } else if (s.velocity > SNAP_VEL || dx > W * SNAP_DIST) {
       next = Math.max(0, next - 1);
     }
-
     snapTo(next);
   }, [snapTo]);
 
@@ -292,7 +319,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
   }, [snapTo]);
 
   if (images.length === 0) return null;
-
   if (images.length === 1) {
     return (
       <img
@@ -319,17 +345,11 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
       onPointerCancel={onPointerCancel}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <img
-        src={images[0]}
-        className="w-full h-auto max-h-[70vh] opacity-0 pointer-events-none block select-none"
-        aria-hidden="true"
-        draggable={false}
-      />
+      <img src={images[0]} className="w-full h-auto max-h-[70vh] opacity-0 pointer-events-none block select-none" aria-hidden="true" draggable={false} />
       <div className="absolute inset-0">
         {images.map((url, i) => {
           const d = i - activeIndex;
           const absD = Math.abs(d);
-          
           return (
             <div
               key={i}
@@ -337,7 +357,6 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
               className="absolute inset-0 w-full h-full flex justify-center items-center"
               style={{
                 willChange: 'transform, opacity',
-                // Embedded directly to guarantee frame 1 is perfectly laid out via native CSS mapping
                 transform: `translate3d(${d * 100}%, ${absD * DROP_Y}px, 0) scale(${1 - absD * SCALE_STEP})`,
                 opacity: Math.max(0, 1 - absD * OPACITY_STEP),
                 visibility: absD > 2.5 ? 'hidden' : 'visible'
@@ -373,10 +392,48 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
 });
 
 /* ============================================================
+   OPTIMISTIC LIKE BUTTON
+   ============================================================ */
+const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
+  const [liked, setLiked] = useState(initialLiked);
+  const [count, setCount] = useState(initialCount);
+  const [isLiking, setIsLiking] = useState(false);
+
+  const handleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isLiking) return;
+    setIsLiking(true);
+    setLiked(!liked);
+    setCount(prev => liked ? prev - 1 : prev + 1);
+    const res = await toggleLike(postId);
+    if (!res?.success) {
+      setLiked(liked);
+      setCount(initialCount);
+    }
+    setIsLiking(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 z-20 relative">
+      <button onClick={handleLike} className="flex items-center justify-center p-1 group transition-all active:scale-90">
+        <Heart 
+          className={`w-[26px] h-[26px] transition-colors ${
+            liked 
+              ? "text-red-500 fill-red-500" 
+              : "text-zinc-100 group-hover:text-red-500"
+          }`} 
+        />
+      </button>
+      {count > 0 && <span className="text-sm font-bold text-white mr-2">{count}</span>}
+    </div>
+  );
+};
+
+/* ============================================================
    POST ITEM COMPONENT
    ============================================================ */
 const PostItem = memo(function PostItem({
-  post, pfpUrl, slideRef, style, onMenuClick, index, currentIndex
+  post, pfpUrl, slideRef, style, onMenuClick, index, currentIndex, onCommentClick, onLikesClick
 }: any) {
   const images = parsePostImages(post);
   const isNear = currentIndex !== null && Math.abs(currentIndex - index) <= 1;
@@ -395,7 +452,7 @@ const PostItem = memo(function PostItem({
             <div className="flex items-center gap-1">
               <h4 className="font-bold text-sm text-white">{post.users?.full_name || 'User'}</h4>
               <CheckCircle2 className="w-3 h-3 text-blue-500 fill-blue-500/20" />
-              <span className="text-zinc-600 text-xs font-medium mx-0.5">•</span>
+              <span className="text-zinc-600 text-xs font-medium mx-0.5"> </span>
               <span className="text-zinc-400 text-xs font-medium uppercase tracking-wider">{timeAgo(post.created_at)}</span>
             </div>
             <p className="text-[11px] text-zinc-500 font-medium">@{post.users?.username || 'user'}</p>
@@ -416,23 +473,19 @@ const PostItem = memo(function PostItem({
         </div>
       )}
 
-      <div className="px-4 pt-4 pb-2 flex items-center bg-black shrink-0">
-        <div className="flex gap-6 z-10">
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
-            <div className="p-1.5 -ml-1.5 rounded-full group-hover:bg-orange-500/10 transition-colors">
-              <Zap className="w-6 h-6 text-zinc-400 group-hover:text-orange-500 transition-colors" />
-            </div>
-          </button>
-          <button className="flex items-center gap-2 group transition-all active:scale-95">
-            <div className="p-1.5 rounded-full group-hover:bg-[#4fa8ff]/10 transition-colors">
-              <MessageSquare className="w-6 h-6 text-zinc-400 group-hover:text-[#4fa8ff] transition-colors" />
-            </div>
-          </button>
-          <button className="p-1.5 rounded-full hover:bg-zinc-800 transition-colors active:scale-95">
-            <Send className="w-6 h-6 text-zinc-400" />
-          </button>
-        </div>
+      <div className="px-3 pt-3 pb-2 flex items-center gap-4 bg-black shrink-0 relative z-10">
+        <LikeButton postId={post.id} initialLiked={post.hasLiked} initialCount={post.likeCount} />
+        
+        <button onClick={() => onCommentClick(post.id)} className="flex items-center gap-2 group transition-all active:scale-95">
+          <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-[#4fa8ff] transition-colors" />
+        </button>
+        <button className="hover:bg-zinc-800 transition-colors active:scale-95 ml-auto p-1 rounded-full">
+          <Send className="w-[26px] h-[26px] text-zinc-100 hover:text-[#4fa8ff]" />
+        </button>
       </div>
+
+      {/* Renders Likers Breakdown */}
+      <LikersText likers={post.likers || []} onClick={() => onLikesClick(post.id)} />
 
       <div className="px-4 pb-4">
         {post.content && (
@@ -449,29 +502,27 @@ const PostItem = memo(function PostItem({
 export default function ProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [pressedGridId, setPressedGridId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
+  const [pressedGridId, setPressedGridId] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [isProfileFetching, setIsProfileFetching] = useState(true);
   const [activeTab, setActiveTab] = useState('posts');
   const [isUploading, setIsUploading] = useState(false);
-  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bannerInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [isEditing, setIsEditing] = useState(false);
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [isBannerMenuOpen, setIsBannerMenuOpen] = useState(false);
   const [isCustomizeMenuOpen, setIsCustomizeMenuOpen] = useState(false);
-
   const [isCropperOpen, setIsCropperOpen] = useState(false);
   const [cropType, setCropType] = useState<'avatar' | 'banner' | 'post'>('avatar');
+
   const [pfpUrl, setPfpUrl] = useState(generateDefaultAvatar('Nexus'));
   const [bannerUrl, setBannerUrl] = useState(generateDefaultBanner('Nexus'));
-
   const [profileData, setProfileData] = useState<ProfileDraft>({ name: '', username: '', bio: '', websites: [''], profile_effect: 'none' });
   const [draftProfile, setDraftProfile] = useState<ProfileDraft>({ name: '', username: '', bio: '', websites: [''], profile_effect: 'none' });
-  
   const [originalUsername, setOriginalUsername] = useState("");
   const [isCheckingUsername, setIsCheckingUsername] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
@@ -485,22 +536,22 @@ export default function ProfilePage() {
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [isPostsFetching, setIsPostsFetching] = useState(true);
 
-  // Create Post State
+  // Sheets & Action States
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [postContent, setPostContent] = useState("");
   const [draftPostFiles, setDraftPostFiles] = useState<File[]>([]);
   const [draftPostPreviews, setDraftPostPreviews] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const postInputRef = useRef<HTMLInputElement>(null);
-
-  // Post Options Menu State
+  
   const [postOptionsMenu, setPostOptionsMenu] = useState<any | null>(null);
-
-  // Edit Post State
   const [isEditPostOpen, setIsEditPostOpen] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [existingUrls, setExistingUrls] = useState<string[]>([]);
   const [urlsToDelete, setUrlsToDelete] = useState<string[]>([]);
+
+  const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
+  const [activeLikesPostId, setActiveLikesPostId] = useState<string | null>(null);
 
   // Feed & Modals
   const [peekPost, setPeekPost] = useState<any | null>(null);
@@ -528,6 +579,8 @@ export default function ProfilePage() {
   const createPostDrag = useSheetDrag(isCreatePostOpen, () => setIsCreatePostOpen(false), { closeThreshold: 150, opacityDivisor: 500 });
   const editPostDrag = useSheetDrag(isEditPostOpen, () => setIsEditPostOpen(false), { closeThreshold: 150, opacityDivisor: 500 });
   const postOptionsDrag = useSheetDrag(!!postOptionsMenu, () => setPostOptionsMenu(null), { closeThreshold: 100, opacityDivisor: 300 });
+  const commentDrag = useSheetDrag(!!activeCommentPostId, () => setActiveCommentPostId(null), { closeThreshold: 150, opacityDivisor: 500 });
+  const likesDrag = useSheetDrag(!!activeLikesPostId, () => setActiveLikesPostId(null), { closeThreshold: 150, opacityDivisor: 500 });
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -535,14 +588,50 @@ export default function ProfilePage() {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
+  // Handle Background Scrolling locks
   useEffect(() => {
-    if (isEditing || isAvatarMenuOpen || isCropperOpen || isBannerMenuOpen || isCustomizeMenuOpen || isCreatePostOpen || isEditPostOpen || postOptionsMenu !== null || peekPost !== null || feedVisible) {
+    if (isEditing || isAvatarMenuOpen || isCropperOpen || isBannerMenuOpen || isCustomizeMenuOpen || isCreatePostOpen || isEditPostOpen || postOptionsMenu !== null || peekPost !== null || feedVisible || activeCommentPostId || activeLikesPostId) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
     }
     return () => { document.body.style.overflow = ''; };
-  }, [isEditing, isAvatarMenuOpen, isCropperOpen, isBannerMenuOpen, isCustomizeMenuOpen, isCreatePostOpen, isEditPostOpen, postOptionsMenu, peekPost, feedVisible]);
+  }, [isEditing, isAvatarMenuOpen, isCropperOpen, isBannerMenuOpen, isCustomizeMenuOpen, isCreatePostOpen, isEditPostOpen, postOptionsMenu, peekPost, feedVisible, activeCommentPostId, activeLikesPostId]);
+
+  // Deep Link Notification Listener
+  useEffect(() => {
+    const targetPostId = searchParams.get('postId');
+    const sheetToOpen = searchParams.get('open');
+
+    if (targetPostId && userPosts.length > 0) {
+      // Find the specific post in the current user's profile feed
+      const postIndex = userPosts.findIndex((p: any) => p.id === targetPostId);
+      
+      if (postIndex !== -1) {
+        // Snap the Feed open directly to this post index
+        setFeedViewIndex(postIndex);
+        feedViewIndexRef.current = postIndex;
+        setFeedVisible(true);
+        
+        requestAnimationFrame(() => {
+          setFeedAnimIn(true);
+          // Scroll the feed to exactly this post
+          if (feedScrollRef.current) {
+            const h = feedScrollRef.current.clientHeight || window.innerHeight;
+            setFeedHeight(h);
+            feedScrollRef.current.scrollTop = h * postIndex;
+          }
+        });
+
+        // Trigger the requested sheet overlapping the feed
+        if (sheetToOpen === 'likes') setActiveLikesPostId(targetPostId);
+        if (sheetToOpen === 'comments') setActiveCommentPostId(targetPostId);
+        
+        // Remove the params from the URL to prevent triggering again on a refresh
+        window.history.replaceState(null, '', '/profile');
+      }
+    }
+  }, [searchParams, userPosts]);
 
   useEffect(() => {
     const container = feedScrollRef.current;
@@ -555,13 +644,11 @@ export default function ProfilePage() {
   const handleFeedScroll = useCallback(() => {
     const container = feedScrollRef.current;
     if (!container || !feedHeight) return;
-
     requestAnimationFrame(() => {
       const currentScroll = container.scrollTop / feedHeight;
       const activeIdx = Math.round(currentScroll);
       const minIdx = Math.max(0, Math.floor(currentScroll) - 1);
       const maxIdx = Math.min(slideRefs.current.length - 1, Math.ceil(currentScroll) + 1);
-
       for (let i = minIdx; i <= maxIdx; i++) {
         const slide = slideRefs.current[i];
         if (!slide) continue;
@@ -569,12 +656,10 @@ export default function ProfilePage() {
         slide.style.transform = `scale(${1 - dist * 0.03})`;
         slide.style.opacity = String(1 - dist * 0.5);
       }
-
       if (activeIdx !== feedViewIndexRef.current) {
         feedViewIndexRef.current = activeIdx;
       }
     });
-
     if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
     scrollTimeout.current = setTimeout(() => {
       setFeedViewIndex(feedViewIndexRef.current);
@@ -589,12 +674,11 @@ export default function ProfilePage() {
     enabled: !!userId,
   });
 
-  const { data: fetchedPosts, isLoading: isPostsLoading, refetch } = useQuery({
+  const { data: fetchedPosts, isLoading: isPostsLoading } = useQuery({
     queryKey: ['posts', userId],
     queryFn: () => getUserPosts(userId),
     enabled: !!userId,
   });
-
 
   useEffect(() => {
     if (fetchedProfile) {
@@ -625,13 +709,11 @@ export default function ProfilePage() {
     }
   }, [fetchedPosts]);
 
-
   const handlePointerDown = useCallback((e: React.PointerEvent, post: any) => {
     setPressedGridId(post.id);
     isDragging.current = false;
     justPeeked.current = false;
     tapStartPos.current = { x: e.clientX, y: e.clientY };
-
     pressTimer.current = setTimeout(() => {
       if (!isDragging.current) {
         setPeekPost(post);
@@ -655,7 +737,6 @@ export default function ProfilePage() {
   const handlePointerUp = useCallback((index: number) => {
     setPressedGridId(null);
     if (pressTimer.current) clearTimeout(pressTimer.current);
-
     if (isPeekingAnim || justPeeked.current) {
       setIsPeekingAnim(false);
       setTimeout(() => setPeekPost(null), 300);
@@ -663,7 +744,6 @@ export default function ProfilePage() {
       isDragging.current = false;
       return;
     }
-
     if (!isDragging.current) {
       if (feedScrollRef.current) {
         const h = feedScrollRef.current.clientHeight || window.innerHeight;
@@ -691,7 +771,6 @@ export default function ProfilePage() {
     setPressedGridId(null);
     if (pressTimer.current) clearTimeout(pressTimer.current);
     isDragging.current = false;
-
     if (isPeekingAnim || justPeeked.current) {
       setIsPeekingAnim(false);
       setTimeout(() => setPeekPost(null), 300);
@@ -738,7 +817,6 @@ export default function ProfilePage() {
     try {
       const croppedFile = await getCroppedImg(imageSrc, croppedAreaPixels, cropType);
       if (!croppedFile) throw new Error("Cropping failed");
-
       if (cropType === 'post') {
         const localPreviewUrl = URL.createObjectURL(croppedFile);
         setDraftPostFiles(prev => [...prev, croppedFile]);
@@ -749,7 +827,6 @@ export default function ProfilePage() {
         const sig = await getCloudinarySignature(cropType, targetFolder);
         
         if (!sig.success) throw new Error(sig.error || "Signature generation failed");
-
         const formData = new FormData();
         formData.append("file", croppedFile);
         formData.append("api_key", sig.apiKey!);
@@ -757,15 +834,12 @@ export default function ProfilePage() {
         formData.append("signature", sig.signature!);
         formData.append("folder", sig.folder!);
         formData.append("public_id", sig.publicId!);
-
         const cloudinaryResponse = await fetch(
           `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
           { method: "POST", body: formData }
         );
-
         const data = await cloudinaryResponse.json();
         const secureImageUrl = data.secure_url;
-
         if (cropType === 'avatar') {
           setPfpUrl(secureImageUrl);
           closeCropper();
@@ -786,14 +860,11 @@ export default function ProfilePage() {
   const handlePublishPost = useCallback(async () => {
     if (!postContent.trim() && draftPostFiles.length === 0) return;
     setIsPosting(true);
-
     try {
       const uploadedUrls: string[] = [];
-
       for (const file of draftPostFiles) {
         const sig = await getCloudinarySignature("post", "nexus_posts");
         if (!sig.success) throw new Error(sig.error || "Signature generation failed");
-
         const formData = new FormData();
         formData.append("file", file);
         formData.append("api_key", sig.apiKey!);
@@ -801,12 +872,10 @@ export default function ProfilePage() {
         formData.append("signature", sig.signature!);
         formData.append("folder", sig.folder!);
         formData.append("public_id", sig.publicId!);
-
         const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body: formData });
         const data = await cloudinaryResponse.json();
         uploadedUrls.push(data.secure_url);
       }
-
       const result = await createPost(postContent, uploadedUrls);
       
       if (result.success && result.post) {
@@ -849,14 +918,11 @@ export default function ProfilePage() {
   const handleUpdatePost = useCallback(async () => {
     if (!editingPostId) return;
     setIsPosting(true);
-
     try {
       const newlyUploadedUrls: string[] = [];
-
       for (const file of draftPostFiles) {
         const sig = await getCloudinarySignature("post", "nexus_posts");
         if (!sig.success) throw new Error(sig.error || "Signature generation failed");
-
         const formData = new FormData();
         formData.append("file", file);
         formData.append("api_key", sig.apiKey!);
@@ -864,14 +930,11 @@ export default function ProfilePage() {
         formData.append("signature", sig.signature!);
         formData.append("folder", sig.folder!);
         formData.append("public_id", sig.publicId!);
-
         const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`, { method: "POST", body: formData });
         const data = await cloudinaryResponse.json();
         newlyUploadedUrls.push(data.secure_url);
       }
-
       const finalUrls = [...existingUrls, ...newlyUploadedUrls];
-
       const result = await updatePost(editingPostId, postContent, finalUrls, urlsToDelete);
       
       if (result.success && result.post) {
@@ -891,7 +954,6 @@ export default function ProfilePage() {
   const handleDeletePost = useCallback(async (post: any) => {
     if (!post) return;
     setIsPosting(true);
-
     try {
       const urlsToNuke = parsePostImages(post);
       const result = await deletePost(post.id, urlsToNuke);
@@ -918,7 +980,6 @@ export default function ProfilePage() {
 
   const handleSaveProfile = useCallback(async () => {
   if (usernameAvailable === false) return;
-  
   if (!draftProfile.name.trim()) {
     setSaveError("Name cannot be empty.");
     return;
@@ -927,11 +988,10 @@ export default function ProfilePage() {
     setSaveError("Username must be at least 3 characters.");
     return;
   }
-  
   setSaveError("");
   const result = await updateProfileData(draftProfile);
     
-    if (result.success) {
+  if (result.success) {
       setProfileData(draftProfile);
       setOriginalUsername(draftProfile.username);
       setIsEditing(false);
@@ -944,7 +1004,6 @@ export default function ProfilePage() {
   const currentMmr = userPoints[userPoints.length - 1];
   const currentRankIndex = RANK_TIERS.reduce((acc, tier, idx) => (currentMmr >= tier.minMmr ? idx : acc), 0);
   const currentTier = RANK_TIERS[currentRankIndex];
-
   const trophyHighlights = [
     { name: 'Codemania', img: 'https://images.unsplash.com/photo-1567427017947-545c5f8d16ad?w=150&h=150&fit=crop', ring: 'bg-gradient-to-tr from-yellow-400 to-orange-500' },
     { name: 'CyberQuest', img: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=150&h=150&fit=crop', ring: 'bg-gradient-to-tr from-blue-500 to-cyan-400' },
@@ -959,6 +1018,7 @@ export default function ProfilePage() {
       </div>
     );
   }
+
   if (status === "unauthenticated") return null;
 
   return (
@@ -989,7 +1049,6 @@ export default function ProfilePage() {
             onRemoveImage={handleRemoveDraftUrl}
             onPost={handlePublishPost} isUploading={isUploading} isPosting={isPosting}
           />
-
           <CreatePostSheet
             isOpen={isEditPostOpen} drag={editPostDrag} onClose={() => setIsEditPostOpen(false)}
             content={postContent} onContentChange={setPostContent} onChooseImage={() => postInputRef.current?.click()}
@@ -1003,7 +1062,6 @@ export default function ProfilePage() {
             }}
             onPost={handleUpdatePost} isUploading={isUploading} isPosting={isPosting}
           />
-
           <div className={`fixed inset-0 z-[120] flex flex-col justify-end overflow-hidden ${postOptionsMenu ? 'pointer-events-auto' : 'pointer-events-none'}`}>
             <div
               ref={postOptionsDrag.backdropRef}
@@ -1050,9 +1108,8 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-
           <input type="file" ref={postInputRef} accept="image/*" onChange={(e) => onFileChange(e, 'post')} className="hidden" />
-
+          
           <EditProfileSheet
             isOpen={isEditing} drag={editDrag} draftProfile={draftProfile} onDraftChange={(patch) => setDraftProfile(prev => ({ ...prev, ...patch }))}
             saveError={saveError} usernameAvailable={usernameAvailable} isCheckingUsername={isCheckingUsername}
@@ -1165,13 +1222,15 @@ export default function ProfilePage() {
                   opacity: 1 - initialDist * 0.5,
                 }}
                 onMenuClick={setPostOptionsMenu}
+                onCommentClick={setActiveCommentPostId}
+                onLikesClick={setActiveLikesPostId}
               />
             );
           })}
         </div>
       </div>
 
-        <div className="max-w-xl mx-auto min-h-screen flex flex-col relative z-10 overflow-x-hidden">
+      <div className="max-w-xl mx-auto min-h-screen flex flex-col relative z-10 overflow-x-hidden">
         <div className="relative">
           <div className="h-36 w-full relative overflow-hidden bg-black flex justify-center items-center">
             <div className="absolute w-full h-full bg-cover bg-center origin-top transition-all duration-700" style={{ backgroundImage: `url(${bannerUrl})` }} />
@@ -1207,6 +1266,7 @@ export default function ProfilePage() {
               <Settings className="w-6 h-6 text-white drop-shadow-md cursor-pointer hover:rotate-90 active:scale-90 transition-transform duration-500" />
             </div>
           </div>
+
           <div className="px-4 flex justify-between items-center -mt-10 relative z-10">
             <div className="relative">
               <div className="w-[88px] h-[88px] rounded-full p-1 bg-gradient-to-tr from-purple-600 via-pink-500 to-blue-500 cursor-pointer group active:scale-90 transition-transform duration-300" onClick={openEditModal}>
@@ -1221,6 +1281,7 @@ export default function ProfilePage() {
               </div>
               <div className="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-[3px] border-black rounded-full" />
             </div>
+
             <div className="flex gap-6 text-center mr-4 pt-8">
               <div className="flex flex-col"><span className="font-bold text-lg leading-tight">{userPosts.length}</span><span className="text-xs text-zinc-400">Posts</span></div>
               <div className="flex flex-col"><span className="font-bold text-lg leading-tight">48</span><span className="text-xs text-zinc-400">Teamed</span></div>
@@ -1253,7 +1314,7 @@ export default function ProfilePage() {
             <button onClick={() => setIsCustomizeMenuOpen(true)} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold py-2 rounded-xl text-sm transition-all active:scale-95 border border-zinc-800">Customize</button>
           </div>
         </div>
-
+        
         <RankHUD points={userPoints} />
 
         <div className="px-2 pt-6">
@@ -1344,7 +1405,24 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-      </div>
-    </div>
+
+        </div> 
+
+      {/* === Action Sheets Mounted at Root Level === */}
+      <CommentSheet 
+        isOpen={!!activeCommentPostId} 
+        drag={commentDrag} 
+        onClose={() => setActiveCommentPostId(null)} 
+        postId={activeCommentPostId} 
+        currentUserAvatar={pfpUrl} 
+      />
+      <LikesSheet 
+        isOpen={!!activeLikesPostId} 
+        drag={likesDrag} 
+        onClose={() => setActiveLikesPostId(null)} 
+        postId={activeLikesPostId} 
+      />
+
+    </div> 
   );
 }

@@ -84,6 +84,7 @@ export default function useSheetDrag(
       cancelAnimationFrame(frame.current);
       frame.current = null;
     }
+
     const samples = velSamples.current;
     let avgVelocity = 0;
     if (samples.length > 0) {
@@ -101,6 +102,16 @@ export default function useSheetDrag(
     visualY.current = 0;
 
     if (shouldClose) {
+      if (sheetRef.current && backdropRef.current) {
+        // Pre-apply close transitions before React unmounts/hides the sheet
+        sheetRef.current.style.transition = SHEET_CLOSE_TRANSITION;
+        sheetRef.current.style.transform = 'translateY(100%)';
+        backdropRef.current.style.transition = BACKDROP_CLOSE_TRANSITION;
+        backdropRef.current.style.opacity = '0';
+        
+        // Force layout reflow so the browser registers the transition *before* React applies `visibility: hidden`
+        void sheetRef.current.offsetHeight;
+      }
       onClose();
     } else if (sheetRef.current && backdropRef.current) {
       sheetRef.current.style.transition = SHEET_SNAPBACK_TRANSITION;

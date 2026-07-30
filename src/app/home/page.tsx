@@ -639,26 +639,29 @@ export default function HomePage() {
                      <div className="text-center text-zinc-500 mt-10 text-sm">No users found.</div>
                   ) : (
                     searchResults.map((user, i) => (
-                      <div 
-                        key={user.id}
-                        onClick={() => router.push(`/u/${user.username}`)}
-                        className="flex items-center gap-4 p-3 rounded-2xl hover:bg-zinc-900/60 transition-colors cursor-pointer active:scale-[0.98]"
-                        style={{
-                          animation: `slideUpResult 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms forwards`,
-                          opacity: 0 
-                        }}
-                      >
-                        <img 
-                          src={user.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.username}&backgroundColor=ffffff`} 
-                          alt={user.username} 
-                          className="w-12 h-12 rounded-full border border-zinc-800 object-cover shrink-0"
-                        />
-                        <div className="flex flex-col">
-                          <span className="font-bold text-[15px] text-white tracking-tight">{user.full_name}</span>
-                          <span className="text-[13px] text-zinc-500 font-medium">@{user.username}</span>
-                        </div>
-                      </div>
-                    ))
+  <div 
+    key={user.id}
+    onClick={() => {
+      closeSearch();
+      router.push(`/u/${user.username}`);
+    }}
+    className="flex items-center gap-4 p-3 rounded-2xl hover:bg-zinc-900/60 transition-colors cursor-pointer active:scale-[0.98]"
+    style={{
+      animation: `slideUpResult 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms forwards`,
+      opacity: 0 
+    }}
+  >
+    <img 
+      src={user.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.username}&backgroundColor=ffffff`} 
+      alt={user.username} 
+      className="w-12 h-12 rounded-full border border-zinc-800 object-cover shrink-0" 
+    />
+    <div className="flex flex-col">
+      <span className="font-bold text-[15px] text-white tracking-tight">{user.full_name}</span>
+      <span className="text-[13px] text-zinc-500 font-medium">@{user.username}</span>
+    </div>
+  </div>
+))
                   )}
                 </div>
               )}

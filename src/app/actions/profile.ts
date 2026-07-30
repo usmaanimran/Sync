@@ -178,3 +178,27 @@ export async function updateProfileEffect(effect: string) {
   
   return { success: !error, error: error?.message };
 }
+
+export async function getUserProfileByUsername(username: string) {
+  if (!username) return null;
+  const cleanUsername = username.toLowerCase().trim();
+
+  const getCachedProfile = unstable_cache(
+    async () => {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, avatar_url, banner_url, full_name, username, bio, websites, profile_effect")
+        .eq("username", cleanUsername)
+        .single();
+
+      return error ? null : data;
+    },
+    [`profile-username-${cleanUsername}`],
+    {
+      tags: [`profile-username-${cleanUsername}`],
+      revalidate: 3600
+    }
+  );
+
+  return getCachedProfile();
+}

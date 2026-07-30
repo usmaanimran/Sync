@@ -10,6 +10,7 @@ const supabase = createClient(
 );
 
 export async function getGlobalFeed(pageParam: number = 0, limit: number = 10) {
+  
   const session = await getServerSession(authOptions);
   const currentUserId = session?.user?.id;
 
@@ -26,7 +27,8 @@ export async function getGlobalFeed(pageParam: number = 0, limit: number = 10) {
       created_at,
       user_id,
       users!inner ( full_name, username, avatar_url ),
-      post_likes ( user_id, users ( username, avatar_url ) )
+      post_likes ( user_id, users ( username, avatar_url ) ),
+      post_comments ( id ) 
     `)
     .order("created_at", { ascending: false })
     .range(from, to); // Fetch only this chunk
@@ -49,12 +51,15 @@ export async function getGlobalFeed(pageParam: number = 0, limit: number = 10) {
     score += Math.random() * 15;
     const hasLiked = post.post_likes.some((like: any) => like.user_id === currentUserId);
     const likeCount = post.post_likes.length;
+    
+     const commentCount = post.post_comments?.length || 0; 
+    
     const likers = post.post_likes.map((like: any) => ({
       username: like.users?.username,
       avatar_url: like.users?.avatar_url
     })).filter((l: any) => l.username);
 
-    return { ...post, feedScore: score, hasLiked, likeCount, likers };
+     return { ...post, feedScore: score, hasLiked, likeCount, commentCount, likers };
   });
 
   const sortedPosts = scoredPosts.sort((a, b) => b.feedScore - a.feedScore);

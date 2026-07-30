@@ -20,7 +20,7 @@ import CommentSheet from '../home/CommentSheet';
 import LikesSheet from '../home/LikesSheet';
 import { ProfileDraft } from './types';
 import { getCloudinarySignature } from '../actions/cloudinary';
-import { timeAgo, RANK_TIERS, generateDefaultAvatar, generateDefaultBanner } from './helpers';
+import { timeAgo, RANK_TIERS, generateDefaultAvatar, generateDefaultBanner, formatCount } from './helpers';
 import { toggleLike } from "../actions/engagement";
 import {
   Settings, Grid, FolderGit2, CheckCircle2,
@@ -518,9 +518,16 @@ const PostItem = memo(function PostItem({
       <div className="px-3 pt-3 pb-2 flex items-center gap-4 bg-black shrink-0 relative z-10">
         <LikeButton postId={post.id} initialLiked={post.hasLiked} initialCount={post.likeCount} />
         
-        <button onClick={() => onCommentClick(post.id)} className="flex items-center gap-2 group transition-all active:scale-95">
-          <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-[#4fa8ff] transition-colors" />
-        </button>
+        <div className="flex items-center gap-1.5 z-20 relative">
+          <button onClick={() => onCommentClick(post.id)} className="flex items-center justify-center p-1 group transition-all active:scale-95">
+            <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-[#4fa8ff] transition-colors" />
+          </button>
+          {post.commentCount > 0 && (
+            <span className="text-sm font-bold text-white mr-2">
+              {formatCount(post.commentCount)}
+            </span>
+          )}
+        </div>
         <button className="hover:bg-zinc-800 transition-colors active:scale-95 ml-auto p-1 rounded-full">
           <Send className="w-[26px] h-[26px] text-zinc-100 hover:text-[#4fa8ff]" />
         </button>
@@ -640,23 +647,24 @@ function ProfileContent() {
   }, [isEditing, isAvatarMenuOpen, isCropperOpen, isBannerMenuOpen, isCustomizeMenuOpen, isCreatePostOpen, isEditPostOpen, postOptionsMenu, peekPost, feedVisible, activeCommentPostId, activeLikesPostId]);
 
   // Deep Link Notification Listener
+  const deepLinkConsumed = useRef(false);
+
   useEffect(() => {
     const targetPostId = searchParams.get('postId');
     const sheetToOpen = searchParams.get('open');
 
-    if (targetPostId && userPosts.length > 0) {
-      // Find the specific post in the current user's profile feed
+    if (targetPostId && userPosts.length > 0 && !deepLinkConsumed.current) {
+      deepLinkConsumed.current = true;
+
       const postIndex = userPosts.findIndex((p: any) => p.id === targetPostId);
       
       if (postIndex !== -1) {
-        // Snap the Feed open directly to this post index
         setFeedViewIndex(postIndex);
         feedViewIndexRef.current = postIndex;
         setFeedVisible(true);
         
         requestAnimationFrame(() => {
           setFeedAnimIn(true);
-          // Scroll the feed to exactly this post
           if (feedScrollRef.current) {
             const h = feedScrollRef.current.clientHeight || window.innerHeight;
             setFeedHeight(h);
@@ -664,15 +672,13 @@ function ProfileContent() {
           }
         });
 
-        // Trigger the requested sheet overlapping the feed
         if (sheetToOpen === 'likes') setActiveLikesPostId(targetPostId);
         if (sheetToOpen === 'comments') setActiveCommentPostId(targetPostId);
         
-        // Remove the params from the URL to prevent triggering again on a refresh
-        window.history.replaceState(null, '', '/profile');
+        router.replace('/profile', { scroll: false });
       }
     }
-  }, [searchParams, userPosts]);
+  }, [searchParams, userPosts, router]);
 
   useEffect(() => {
     const container = feedScrollRef.current;

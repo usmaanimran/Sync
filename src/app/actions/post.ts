@@ -197,8 +197,10 @@ export async function getUserPosts(userId: string) {
       username,
       avatar_url
     ),
-    post_likes ( user_id, users ( username, avatar_url ) )
+    post_likes ( user_id, users ( username, avatar_url ) ),
+    post_comments ( id )
   `)
+  
   .eq("user_id", userId)
   .order("created_at", { ascending: false });
 
@@ -218,6 +220,7 @@ export async function getUserPosts(userId: string) {
     avatar_url: like.users?.avatar_url
   })).filter((l: any) => l.username) || [];
 
-  return { ...post, hasLiked, likeCount, likers };
-});
+  const commentCount = post.post_comments?.length || 0;
+    return { ...post, hasLiked, likeCount, commentCount, likers };
+  });
 }

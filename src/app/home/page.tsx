@@ -22,6 +22,7 @@ import { getGlobalFeed } from "../actions/feed";
 import { toggleLike } from "../actions/engagement";
 import { searchUsers } from "../actions/search";
 import { useNotifications } from '@/hooks/useNotifications';
+import { formatCount } from '../profile/helpers';
 
 /* ============================================================
    LIKERS TEXT 
@@ -489,12 +490,19 @@ export default function HomePage() {
                   <div className="px-3 flex items-center gap-4 mb-2 mt-2">
                     <LikeButton postId={post.id} initialLiked={post.hasLiked} initialCount={post.likeCount} />
                     
-                    <button 
-                      onClick={() => setActiveCommentPostId(post.id)}
-                      className="flex items-center gap-2 group transition-all active:scale-95"
-                    >
-                      <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-zinc-300 transition-colors" />
-                    </button>
+                    <div className="flex items-center gap-1.5 z-20 relative">
+                      <button 
+                        onClick={() => setActiveCommentPostId(post.id)}
+                        className="flex items-center justify-center p-1 group transition-all active:scale-95"
+                      >
+                        <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-zinc-300 transition-colors" />
+                      </button>
+                      {post.commentCount > 0 && (
+                        <span className="text-sm font-bold text-white mr-2">
+                          {formatCount(post.commentCount)}
+                        </span>
+                      )}
+                    </div>
                     
                     <button className="hover:bg-zinc-800 transition-colors active:scale-95 ml-auto p-1 rounded-full">
                       <Send className="w-[26px] h-[26px] text-zinc-100 hover:text-zinc-300" />

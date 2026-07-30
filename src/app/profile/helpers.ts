@@ -43,3 +43,10 @@ export const generateDefaultBanner = (seed: string) => {
   const index = Math.abs(hash) % DISCORD_VIBE_BANNERS.length;
   return DISCORD_VIBE_BANNERS[index];
 };
+
+export const formatCount = (count: number) => {
+  return Intl.NumberFormat('en-US', {
+    notation: 'compact',
+    maximumFractionDigits: 1
+  }).format(count);
+};

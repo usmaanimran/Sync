@@ -406,41 +406,53 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
 /* ============================================================
    OPTIMISTIC LIKE BUTTON
    ============================================================ */
-// 3. Optimistic Like Button Component
 const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
-  const [isLiking, setIsLiking] = useState(false);
+
+  // Keep track of what the database actually knows
+  const serverState = useRef(initialLiked);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Clean up timeout if the component unmounts while tapping
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   const handleLike = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevents tapping the heart from also triggering background clicks
-    if (isLiking) return;
-    setIsLiking(true);
+    e.stopPropagation();
 
-    // 1. Snapshot the target state
-    const targetLikedState = !liked;
+    // 1. Instantly flip the UI on EVERY tap (No locks, 0 latency)
+    const newLikedState = !liked;
+    setLiked(newLikedState);
+    setCount(prev => newLikedState ? prev + 1 : prev - 1);
 
-    // 2. Instantly update the UI (Escapes the transition block)
-    setLiked(targetLikedState);
-    setCount(prev => targetLikedState ? prev + 1 : prev - 1);
+    // 2. Clear any pending server updates from previous rapid taps
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // 3. Fire the Server Action in the background WITHOUT 'await'
-    toggleLike(postId)
-      .then((res) => {
-        // Revert if the database update fails
-        if (!res?.success) {
-          setLiked(!targetLikedState);
-          setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
-        }
-      })
-      .catch(() => {
-        // Revert on network failure
-        setLiked(!targetLikedState);
-        setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
-      })
-      .finally(() => {
-        setIsLiking(false);
-      });
+    // 3. Wait for you to stop tapping before syncing with the database
+    timeoutRef.current = setTimeout(() => {
+      // Only hit the database if your final UI state differs from the server
+      if (newLikedState !== serverState.current) {
+        toggleLike(postId)
+          .then((res) => {
+            if (res?.success) {
+              serverState.current = newLikedState; // Update our known truth
+            } else {
+              // Revert UI if the server explicitly fails
+              setLiked(serverState.current);
+              setCount(prev => serverState.current ? prev + 1 : prev - 1);
+            }
+          })
+          .catch(() => {
+            // Revert UI on network failure
+            setLiked(serverState.current);
+            setCount(prev => serverState.current ? prev + 1 : prev - 1);
+          });
+      }
+    }, 500); // Waits half a second after your last tap to fire
   };
 
   return (

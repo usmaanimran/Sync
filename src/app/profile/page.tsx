@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback, memo, Suspense } from 'react';import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import getCroppedImg from '@/utils/cropImage';
 import { updateAvatarUrl, updateBannerUrl, getUserProfile, updateProfileData, updateProfileEffect } from "../actions/profile";
 import { isUsernameAvailable } from "../actions/auth";
@@ -406,34 +406,52 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
 /* ============================================================
    OPTIMISTIC LIKE BUTTON
    ============================================================ */
+// 3. Optimistic Like Button Component
 const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [isLiking, setIsLiking] = useState(false);
 
-  const handleLike = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleLike = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevents tapping the heart from also triggering background clicks
     if (isLiking) return;
     setIsLiking(true);
-    setLiked(!liked);
-    setCount(prev => liked ? prev - 1 : prev + 1);
-    const res = await toggleLike(postId);
-    if (!res?.success) {
-      setLiked(liked);
-      setCount(initialCount);
-    }
-    setIsLiking(false);
+
+    // 1. Snapshot the target state
+    const targetLikedState = !liked;
+
+    // 2. Instantly update the UI (Escapes the transition block)
+    setLiked(targetLikedState);
+    setCount(prev => targetLikedState ? prev + 1 : prev - 1);
+
+    // 3. Fire the Server Action in the background WITHOUT 'await'
+    toggleLike(postId)
+      .then((res) => {
+        // Revert if the database update fails
+        if (!res?.success) {
+          setLiked(!targetLikedState);
+          setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
+        }
+      })
+      .catch(() => {
+        // Revert on network failure
+        setLiked(!targetLikedState);
+        setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
+      })
+      .finally(() => {
+        setIsLiking(false);
+      });
   };
 
   return (
     <div className="flex items-center gap-1.5 z-20 relative">
       <button onClick={handleLike} className="flex items-center justify-center p-1 group transition-all active:scale-90">
-        <Heart 
+        <Heart
           className={`w-[26px] h-[26px] transition-colors ${
-            liked 
-              ? "text-red-500 fill-red-500" 
+            liked
+              ? "text-red-500 fill-red-500"
               : "text-zinc-100 group-hover:text-red-500"
-          }`} 
+          }`}
         />
       </button>
       {count > 0 && <span className="text-sm font-bold text-white mr-2">{count}</span>}

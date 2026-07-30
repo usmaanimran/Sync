@@ -16,7 +16,7 @@ export async function searchUsers(query: string) {
   const { data, error } = await supabase
     .from("users")
     .select("id, username, full_name, avatar_url")
-    .or(`username.ilike.%${safeQuery}%,full_name.ilike.%${safeQuery}%`)
+    .or(`username.ilike.${safeQuery}%,full_name.ilike.${safeQuery}%`)
     .limit(8);
 
   if (error) {

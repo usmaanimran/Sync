@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Heart,
@@ -113,37 +113,52 @@ const timeAgo = (dateString: string) => {
   return "now";
 };
 
-// 3. Optimistic Like Button Component
+/// 3. Optimistic Like Button Component
 const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
   const [isLiking, setIsLiking] = useState(false);
 
-  const handleLike = async () => {
+  const handleLike = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevents tapping the heart from also triggering background clicks
     if (isLiking) return;
     setIsLiking(true);
-    
-    setLiked(!liked);
-    setCount(prev => liked ? prev - 1 : prev + 1);
 
-    const res = await toggleLike(postId);
-    if (!res.success) {
-      setLiked(liked);
-      setCount(initialCount);
-    }
-    
-    setIsLiking(false);
+    // 1. Snapshot the target state
+    const targetLikedState = !liked;
+
+    // 2. Instantly update the UI (Escapes the transition block)
+    setLiked(targetLikedState);
+    setCount(prev => targetLikedState ? prev + 1 : prev - 1);
+
+    // 3. Fire the Server Action in the background WITHOUT 'await'
+    toggleLike(postId)
+      .then((res) => {
+        // Revert if the database update fails
+        if (!res?.success) {
+          setLiked(!targetLikedState);
+          setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
+        }
+      })
+      .catch(() => {
+        // Revert on network failure
+        setLiked(!targetLikedState);
+        setCount(prev => !targetLikedState ? prev + 1 : prev - 1);
+      })
+      .finally(() => {
+        setIsLiking(false);
+      });
   };
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5 z-20 relative">
       <button onClick={handleLike} className="flex items-center justify-center p-1 group transition-all active:scale-90">
-        <Heart 
+        <Heart
           className={`w-[26px] h-[26px] transition-colors ${
-            liked 
-              ? "text-red-500 fill-red-500" 
+            liked
+              ? "text-red-500 fill-red-500"
               : "text-zinc-100 group-hover:text-red-500"
-          }`} 
+          }`}
         />
       </button>
       {count > 0 && <span className="text-sm font-bold text-white mr-2">{count}</span>}
@@ -167,13 +182,19 @@ const FeedImageCarousel = ({ images }: { images: string[] }) => {
   }
 
   const handleScroll = () => {
-    if (scrollRef.current) {
+  if (scrollRef.current) {
+    // Escape the render phase synchronously
+    requestAnimationFrame(() => {
+      // Ensure the ref still exists after the frame resolves
+      if (!scrollRef.current) return; 
+      
       const scrollPosition = scrollRef.current.scrollLeft;
       const width = scrollRef.current.clientWidth;
       const newIndex = Math.round(scrollPosition / width);
       setActiveIndex(newIndex);
-    }
-  };
+    });
+  }
+};
 
   return (
     <div className="relative w-full bg-zinc-950 mb-3 group">
@@ -214,6 +235,9 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  // Observer Ref (MUST BE DEFINED HERE, BUT USED AFTER QUERY)
+  const observerRef = useRef<HTMLDivElement>(null);
+
   // Sheet States
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeLikesPostId, setActiveLikesPostId] = useState<string | null>(null); 
@@ -222,11 +246,47 @@ export default function HomePage() {
   // Immersive Search Animation States
   const [searchPhase, setSearchPhase] = useState<SearchPhase>('idle');
   const [searchInput, setSearchInput] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
 
   const searchMounted = searchPhase !== 'idle';
   const searchOpen    = searchPhase === 'open';
+
+  // Notifications Hook
+  const { notifications, unreadCount, markAsRead } = useNotifications(session?.user?.id);
+
+  // Initialize Infinite Query FIRST (Before useEffects that depend on it)
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  } = useInfiniteQuery({
+    queryKey: ["global_feed"],
+    queryFn: ({ pageParam = 0 }) => getGlobalFeed(pageParam, 10),
+    getNextPageParam: (lastPage) => lastPage?.nextPage,
+    initialPageParam: 0,
+  });
+
+  // Flatten all page post arrays into a single continuous list
+  const posts = data?.pages.flatMap((page) => page?.posts || []) || [];
+
+  // Setup Intersection Observer AFTER query initialization
+  useEffect(() => {
+    const target = observerRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Prevent Background Scrolling When Search is Open
   useEffect(() => {
@@ -240,36 +300,32 @@ export default function HomePage() {
     };
   }, [searchMounted]);
 
-  // Live Search DB Query Hook
+  // 1. Hyper-fast 75ms debounce state for Search
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  
   useEffect(() => {
-    if (searchInput.trim().length === 0) {
-      setSearchResults([]);
-      return;
-    }
-
-    const delayDebounceFn = setTimeout(async () => {
-      setIsSearching(true);
-      const res = await searchUsers(searchInput);
-      if (res.success) {
-        setSearchResults(res.users || []);
-      }
-      setIsSearching(false);
-    }, 300);
-
-    return () => clearTimeout(delayDebounceFn);
+    const timer = setTimeout(() => setDebouncedSearch(searchInput), 75); 
+    return () => clearTimeout(timer);
   }, [searchInput]);
+
+  // 2. React Query handles the fetching, caching, and loading states automatically
+  const { data: searchResults = [], isFetching } = useQuery({
+    queryKey: ['search', debouncedSearch],
+    queryFn: async () => {
+      const res = await searchUsers(debouncedSearch);
+      return res.success ? (res.users || []) : [];
+    },
+    // Only run the query if there is actually text to search
+    enabled: debouncedSearch.trim().length > 0,
+    // Cache the results for 10 minutes. Backspacing is now literally 0 latency.
+    staleTime: 1000 * 60 * 10, 
+  });
+
+   const isSearching = isFetching || searchInput !== debouncedSearch;
 
   // Drags
   const commentDrag = useSheetDrag(!!activeCommentPostId, () => setActiveCommentPostId(null), { closeThreshold: 150, opacityDivisor: 500 });
   const likesDrag = useSheetDrag(!!activeLikesPostId, () => setActiveLikesPostId(null), { closeThreshold: 150, opacityDivisor: 500 }); 
-
-  // Notifications Hook
-  const { notifications, unreadCount, markAsRead } = useNotifications(session?.user?.id);
-
-  const { data: posts = [], isLoading } = useQuery({
-    queryKey: ["global_feed"],
-    queryFn: () => getGlobalFeed(),
-  });
 
   const liveRadarBeacons = [
     { id: 1, name: "Zaidh", urgent: true },
@@ -441,6 +497,13 @@ export default function HomePage() {
               );
             })
           )}
+          
+          {/* SCROLL SENTINEL */}
+          <div ref={observerRef} className="py-8 flex justify-center items-center w-full">
+            {isFetchingNextPage && (
+              <div className="w-6 h-6 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+            )}
+          </div>
         </div>
         
         <NotificationsSheet 
@@ -499,13 +562,16 @@ export default function HomePage() {
               >
                 <Search className="w-[18px] h-[18px] text-zinc-500 group-focus-within:text-white transition-colors shrink-0" strokeWidth={2.5} />
                 <input
-                  type="text"
-                  value={searchInput}
-                  onChange={e => setSearchInput(e.target.value)}
-                  placeholder="Search Nexus..."
-                  className="bg-transparent border-none outline-none text-[15px] text-white placeholder:text-zinc-500 w-full font-medium tracking-tight h-6 leading-6"
-                  autoFocus
-                />
+  type="search"
+  value={searchInput}
+  onChange={e => setSearchInput(e.target.value)}
+  placeholder="Search Nexus..."
+  className="bg-transparent border-none outline-none text-[15px] text-white placeholder:text-zinc-500 w-full font-medium tracking-tight h-6 leading-6 [&::-webkit-search-cancel-button]:appearance-none"
+  autoFocus
+  autoComplete="off"
+  autoCorrect="off"
+  spellCheck="false"
+/>
               </div>
 
               {/* Staggered Cancel Button */}

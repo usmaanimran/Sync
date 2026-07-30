@@ -25,20 +25,14 @@ export default memo(function NotificationsOverlay({
   isOpen: boolean; onClose: () => void; notifications: any[]; currentUsername?: string | null;
 }) {
   const router = useRouter();
-  
-  // We strictly separate the mount state from the animation state to prevent React from batching them
   const [mounted, setMounted] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
 
+  // 1. Handle DOM mounting and unmounting
   useEffect(() => {
     if (isOpen) {
       setMounted(true);
-      // Force a tiny delay so the browser paints the opacity:0 state FIRST
-      const timer = setTimeout(() => {
-        setAnimateIn(true);
-      }, 10);
       document.body.style.overflow = 'hidden';
-      return () => clearTimeout(timer);
     } else {
       setAnimateIn(false);
       // Wait for the fast exit transition to finish before destroying the DOM node
@@ -50,8 +44,22 @@ export default memo(function NotificationsOverlay({
     }
   }, [isOpen]);
 
+  // 2. Trigger the animation ONLY AFTER React has injected the DOM nodes
+  useEffect(() => {
+    if (mounted && isOpen) {
+      // The nodes exist now. Force the browser to register the initial opacity: 0 state
+      // before we flip animateIn to true on the next frame.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAnimateIn(true);
+        });
+      });
+    }
+  }, [mounted, isOpen]);
+
   if (!mounted) return null;
 
+ 
   const getNotificationData = (notif: any) => {
     const action = notif.type === 'like' ? 'liked' : 'commented on';
     const list = notif.type === 'like' ? notif.post?.post_likes : notif.post?.post_comments;

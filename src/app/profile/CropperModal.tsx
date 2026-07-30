@@ -32,8 +32,17 @@ export default memo(function CropperModal({
     }
   }, [isOpen, imageSrc]);
 
+  // Defer state updates to avoid synchronous mounting errors
+  const handleCropChange = useCallback((newCrop: { x: number; y: number }) => {
+    requestAnimationFrame(() => setCrop(newCrop));
+  }, []);
+
+  const handleZoomChange = useCallback((newZoom: number) => {
+    requestAnimationFrame(() => setZoom(newZoom));
+  }, []);
+
   const onCropCompleteHandler = useCallback((_: any, croppedPixels: any) => {
-    setCroppedAreaPixels(croppedPixels);
+    requestAnimationFrame(() => setCroppedAreaPixels(croppedPixels));
   }, []);
 
   const handleDoneClick = () => {
@@ -82,34 +91,34 @@ export default memo(function CropperModal({
       <div className="relative flex-1 bg-black w-full h-full touch-none overflow-hidden will-change-transform">
         {imageSrc && (
           <Cropper
-  image={imageSrc}
-  crop={crop}
-  zoom={zoom}
-  aspect={cropType === 'avatar' ? 1 : cropType === 'banner' ? 21 / 9 : 4 / 5}
-  cropShape={cropType === 'avatar' ? 'round' : 'rect'}
-  showGrid={false}
-  onCropChange={setCrop}
-  onCropComplete={onCropCompleteHandler}
-  onZoomChange={setZoom}
-  minZoom={1}
-  maxZoom={4}
-  zoomSpeed={0.8}
-  restrictPosition={true}
-  objectFit="contain"
-  style={{
-    containerStyle: {
-      width: '100vw', // Override default container constraints for edge-to-edge layout
-      height: '100%',
-      backgroundColor: '#000',
-      touchAction: 'none', 
-    },
-    cropAreaStyle: {
-      border: '2px solid rgba(79, 168, 255, 0.8)',
-      // Generate synthetic overlay using extended box-shadow radius
-      boxShadow: '0 0 0 99999px rgba(0, 0, 0, 0.85)', 
-    },
-  }}
-/>
+            image={imageSrc}
+            crop={crop}
+            zoom={zoom}
+            aspect={cropType === 'avatar' ? 1 : cropType === 'banner' ? 21 / 9 : 4 / 5}
+            cropShape={cropType === 'avatar' ? 'round' : 'rect'}
+            showGrid={false}
+            onCropChange={handleCropChange}
+            onCropComplete={onCropCompleteHandler}
+            onZoomChange={handleZoomChange}
+            minZoom={1}
+            maxZoom={4}
+            zoomSpeed={0.8}
+            restrictPosition={true}
+            objectFit="contain"
+            style={{
+              containerStyle: {
+                width: '100vw', // Override default container constraints for edge-to-edge layout
+                height: '100%',
+                backgroundColor: '#000',
+                touchAction: 'none', 
+              },
+              cropAreaStyle: {
+                border: '2px solid rgba(79, 168, 255, 0.8)',
+                // Generate synthetic overlay using extended box-shadow radius
+                boxShadow: '0 0 0 99999px rgba(0, 0, 0, 0.85)', 
+              },
+            }}
+          />
         )}
       </div>
 

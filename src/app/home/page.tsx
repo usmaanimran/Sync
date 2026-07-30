@@ -300,9 +300,14 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Prevent Background Scrolling When Search is Open
+  // Prevent Background Scrolling When Any Overlay is Open
   useEffect(() => {
-    if (searchMounted) {
+    if (
+      searchMounted || 
+      activeCommentPostId !== null || 
+      activeLikesPostId !== null || 
+      isNotifsOpen
+    ) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -310,7 +315,7 @@ export default function HomePage() {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [searchMounted]);
+  }, [searchMounted, activeCommentPostId, activeLikesPostId, isNotifsOpen]);
 
   // 1. Hyper-fast 75ms debounce state for Search
   const [debouncedSearch, setDebouncedSearch] = useState('');

@@ -1,9 +1,7 @@
 import React, { memo, useState, useEffect } from 'react';
 import { X, Send, Loader2 } from 'lucide-react';
 import { getComments, addComment } from '../actions/engagement';
-
-// Note: Ensure timeAgo is exported from your helpers, or paste it here.
-import { timeAgo } from '../profile/helpers'; 
+import { timeAgo } from '../profile/helpers';
 
 export default memo(function CommentSheet({
   isOpen, drag, onClose, postId, currentUserAvatar
@@ -13,7 +11,6 @@ export default memo(function CommentSheet({
   const [comments, setComments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch comments whenever the sheet opens for a specific post
   useEffect(() => {
@@ -24,19 +21,49 @@ export default memo(function CommentSheet({
         setLoading(false);
       });
     }
-   }, [isOpen, postId]);
+  }, [isOpen, postId]);
 
-  const handleSend = async () => {
-    if (!newComment.trim() || !postId || isSubmitting) return;
-    setIsSubmitting(true);
+  const handleSend = () => {
+    const commentText = newComment.trim();
+    if (!commentText || !postId) return;
 
-    const res = await addComment(postId, newComment);
-    if (res.success && res.comment) {
-      setComments((prev) => [...prev, res.comment]);
-      setNewComment("");
-    }
-    
-    setIsSubmitting(false);
+    // 1. Snapshot the text and instantly clear the input for zero-latency typing
+    setNewComment("");
+
+    // 2. Create an optimistic "temporary" comment
+    const tempId = `temp-${Date.now()}`;
+    const optimisticComment = {
+      id: tempId,
+      content: commentText,
+      created_at: new Date().toISOString(),
+      users: {
+        username: "You", // Temporary local display name
+        avatar_url: currentUserAvatar
+      }
+    };
+
+    // 3. Instantly inject it into the UI
+    setComments((prev) => [...prev, optimisticComment]);
+
+    // 4. Send to the database in the background WITHOUT 'await'
+    addComment(postId, commentText)
+      .then((res) => {
+        if (res.success && res.comment) {
+          // Seamlessly swap the temporary comment with the real database comment
+          setComments((prev) =>
+            prev.map((c) => (c.id === tempId ? res.comment : c))
+          );
+        } else {
+          // Revert if the server explicitly rejects it
+          setComments((prev) => prev.filter((c) => c.id !== tempId));
+          setNewComment(commentText); // Put their typed text back
+        }
+      })
+      .catch(() => {
+        // Revert on network failure
+        setComments((prev) => prev.filter((c) => c.id !== tempId));
+        setNewComment(commentText);
+      });
   };
 
   return (
@@ -47,10 +74,10 @@ export default memo(function CommentSheet({
         style={drag.backdropStyle}
         onClick={onClose}
       />
-      <div 
-        ref={drag.sheetRef} 
-        className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col shadow-[0_-20px_60px_rgba(0,0,0,0.8)] border-t border-zinc-800/60" 
-        style={{ ...drag.sheetStyle, maxHeight: '85dvh', height: '85dvh' }}
+      <div
+         ref={drag.sheetRef}
+         className="absolute bottom-0 left-0 right-0 bg-[#0a0d10] rounded-t-[28px] flex flex-col shadow-[0_-20px_60px_rgba(0,0,0,0.8)] border-t border-zinc-800/60"
+         style={{ ...drag.sheetStyle, maxHeight: '85dvh', height: '85dvh' }}
       >
         {/* Handle Bar */}
         <div className="flex-shrink-0 z-20 bg-[#0a0d10] rounded-t-[28px]" style={{ touchAction: 'none' }} onTouchStart={drag.handleTouchStart} onTouchMove={drag.handleTouchMove} onTouchEnd={drag.handleTouchEnd}>
@@ -75,12 +102,12 @@ export default memo(function CommentSheet({
             </div>
           ) : (
             comments.map((comment: any) => (
-              <div key={comment.id} className="flex gap-3">
-                <img 
-                  src={comment.users?.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${comment.users?.username}&backgroundColor=ffffff`} 
-                  alt="avatar" 
-                  className="w-8 h-8 rounded-full border border-zinc-800 object-cover shrink-0" 
-                />
+              <div key={comment.id} className={`flex gap-3 transition-opacity ${comment.id.toString().startsWith('temp-') ? 'opacity-70' : 'opacity-100'}`}>
+                <img
+                   src={comment.users?.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${comment.users?.username}&backgroundColor=ffffff`}
+                   alt="avatar"
+                   className="w-8 h-8 rounded-full border border-zinc-800 object-cover shrink-0"
+                 />
                 <div className="flex flex-col">
                   <div className="flex items-baseline gap-2">
                     <span className="font-bold text-sm text-white">{comment.users?.username}</span>
@@ -97,17 +124,21 @@ export default memo(function CommentSheet({
         <div className="shrink-0 border-t border-zinc-800/60 p-4 bg-[#0a0d10] mb-safe">
           <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-full px-1 py-1 pr-2">
             <img src={currentUserAvatar} alt="You" className="w-8 h-8 rounded-full object-cover shrink-0 ml-1" />
-            <input 
+            <input
               type="text"
+              inputMode="text"
+              enterKeyHint="send"
+              autoComplete="off"
+              autoCorrect="on"
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Add a comment..."
               className="flex-1 bg-transparent text-sm text-white placeholder-zinc-500 outline-none px-2"
             />
-            <button 
+            <button
               onClick={handleSend}
-              disabled={!newComment.trim() || isSubmitting}
+              disabled={!newComment.trim()}
               className={`p-1.5 rounded-full transition-all ${newComment.trim() ? 'bg-[#4fa8ff] text-black active:scale-95' : 'text-zinc-600'}`}
             >
               <Send className="w-4 h-4" />

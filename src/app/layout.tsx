@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 
 // Enforce strict dark mode system UI colors
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#121212",
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
@@ -37,7 +37,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-black text-white">
+      <body className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]">
         <Providers>{children}</Providers>
       </body>
     </html>

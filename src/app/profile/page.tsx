@@ -1063,7 +1063,7 @@ function ProfileContent() {
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-[#4fa8ff]/30 w-full relative">
+    <div className="min-h-screen bg-transparent text-zinc-100 font-sans selection:bg-white/20 pb-24">
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

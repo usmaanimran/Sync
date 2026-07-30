@@ -376,7 +376,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white font-sans selection:bg-white/20 pb-24">
+    <div className="min-h-screen bg-transparent text-zinc-100 font-sans selection:bg-white/20 pb-24">
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -390,7 +390,7 @@ export default function HomePage() {
       <div className="max-w-xl mx-auto w-full flex flex-col relative z-10">
         
         {/* TOP BAR WITH PERFECT TOP-SEAL */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-black/90 backdrop-blur-2xl sticky top-0 z-50 border-b border-white/[0.06] shadow-sm relative before:content-[''] before:absolute before:-top-12 before:inset-x-0 before:h-12 before:bg-black">
+        <div className="flex items-center justify-between px-5 py-3.5 bg-[#121212]/90 backdrop-blur-2xl ... before:bg-transparent">
           <span className="font-extrabold text-[22px] tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white via-zinc-200 to-zinc-500">
             Nexus
           </span>
@@ -446,7 +446,7 @@ export default function HomePage() {
         </div>
 
         {/* MAIN FEED */}
-        <div className="flex flex-col bg-black">
+        <div className="flex flex-col bg-transparent">
           {posts.length === 0 ? (
             <div className="py-20 text-center text-zinc-500 text-sm">No posts on the grid yet.</div>
           ) : (

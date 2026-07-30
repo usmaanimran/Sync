@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  /* 1. Force the root to be black so the system UI matches your app */
-  --background: #000000;
-  --foreground: #ededed;
+  /* Elevated dark gray background for better eye comfort */
+  --background: #121212; 
+  /* Softer off-white text to prevent blooming */
+  --foreground: #e4e4e7; 
 }
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

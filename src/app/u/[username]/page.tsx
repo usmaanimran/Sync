@@ -540,9 +540,10 @@ function PublicProfileContent() {
   });
 
   // 2. Fetch user posts once profile is resolved
-  const { data: userPosts = [], isLoading: isPostsLoading } = useQuery({
+   const { data: userPosts = [], isLoading: isPostsLoading } = useQuery({
     queryKey: ['public-posts', userProfile?.id],
-    queryFn: () => getUserPosts(userProfile.id),
+    // Add the ! after userProfile to assure TypeScript it exists
+    queryFn: () => getUserPosts(userProfile!.id), 
     enabled: !!userProfile?.id,
   });
 

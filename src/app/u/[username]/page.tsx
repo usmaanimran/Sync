@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { getUserProfileByUsername } from "../../actions/profile";
 import { getUserPosts } from "../../actions/post";
+import { getLinkStatus, toggleLink, acceptLinkRequest, rejectLinkRequest } from "../../actions/links";
 import ProfileEffect from '../../profile/ProfileEffect';
 import PeekPostModal from '../../profile/PeekPostModal';
 import CommentSheet from '../../home/CommentSheet';
@@ -377,7 +378,7 @@ const ImageCarousel = memo(function ImageCarousel({ images, isNear }: ImageCarou
    ============================================================ */
 const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
   const [liked, setLiked] = useState(initialLiked);
-  const [count, setCount] = useState(initialCount);
+  const [count, useStateCount] = useState(initialCount);
   const serverState = useRef(initialLiked);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -387,15 +388,15 @@ const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, in
     e.stopPropagation();
     const newLikedState = !liked;
     setLiked(newLikedState);
-    setCount(prev => newLikedState ? prev + 1 : prev - 1);
+    useStateCount(prev => newLikedState ? prev + 1 : prev - 1);
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       if (newLikedState !== serverState.current) {
         toggleLike(postId).then((res) => {
           if (res?.success) serverState.current = newLikedState;
-          else { setLiked(serverState.current); setCount(prev => serverState.current ? prev + 1 : prev - 1); }
-        }).catch(() => { setLiked(serverState.current); setCount(prev => serverState.current ? prev + 1 : prev - 1); });
+          else { setLiked(serverState.current); useStateCount(prev => serverState.current ? prev + 1 : prev - 1); }
+        }).catch(() => { setLiked(serverState.current); useStateCount(prev => serverState.current ? prev + 1 : prev - 1); });
       }
     }, 500);
   };
@@ -518,6 +519,11 @@ function PublicProfileContent() {
   const [feedVisible, setFeedVisible] = useState(false);
   const [feedAnimIn, setFeedAnimIn] = useState(false);
 
+  // Link Up System State
+  const [linkStatus, setLinkStatus] = useState<'none' | 'pending' | 'accepted' | 'needs_response'>('none');
+  const [isLinkLoading, setIsLinkLoading] = useState(false);
+  const [isInitialCheckDone, setIsInitialCheckDone] = useState(false);
+
   // Gesture & Optimization Refs
   const pressTimer = useRef<NodeJS.Timeout | null>(null);
   const isDragging = useRef(false);
@@ -540,14 +546,60 @@ function PublicProfileContent() {
   });
 
   // 2. Fetch user posts once profile is resolved
-   const { data: userPosts = [], isLoading: isPostsLoading } = useQuery({
+  const { data: userPosts = [], isLoading: isPostsLoading } = useQuery({
     queryKey: ['public-posts', userProfile?.id],
-    // Add the ! after userProfile to assure TypeScript it exists
     queryFn: () => getUserPosts(userProfile!.id), 
     enabled: !!userProfile?.id,
   });
 
   const isOwner = session?.user?.id === userProfile?.id;
+
+  // INITIALIZE LINK STATUS ON MOUNT
+  useEffect(() => {
+    if (userProfile?.id) {
+      getLinkStatus(userProfile.id).then(res => {
+        setLinkStatus(res.status as any);
+        setIsInitialCheckDone(true);
+      });
+    }
+  }, [userProfile?.id]);
+
+  // HANDLE LINK CLICK EVENT
+  const handleLinkClick = async () => {
+    if (!userProfile?.id || isLinkLoading) return;
+    setIsLinkLoading(true);
+    
+    const previousStatus = linkStatus;
+    setLinkStatus(previousStatus === 'none' ? 'pending' : 'none');
+
+    const res = await toggleLink(userProfile.id);
+    if (!res.success) {
+      setLinkStatus(previousStatus); 
+    } else {
+      setLinkStatus(res.newStatus as any);
+    }
+    setIsLinkLoading(false);
+  };
+
+  // ACCEPT REQUEST DIRECTLY FROM PROFILE
+  const handleAcceptRequest = async () => {
+    if (!userProfile?.id || isLinkLoading) return;
+    setIsLinkLoading(true);
+    setLinkStatus('accepted');
+    const res = await acceptLinkRequest(userProfile.id);
+    if (!res.success) setLinkStatus('needs_response');
+    setIsLinkLoading(false);
+  };
+
+  // REJECT REQUEST DIRECTLY FROM PROFILE
+  const handleRejectRequest = async () => {
+    if (!userProfile?.id || isLinkLoading) return;
+    setIsLinkLoading(true);
+    setLinkStatus('none');
+    const res = await rejectLinkRequest(userProfile.id);
+    if (!res.success) setLinkStatus('needs_response');
+    setIsLinkLoading(false);
+  };
 
   // Background Scrolling locks
   useEffect(() => {
@@ -679,7 +731,15 @@ function PublicProfileContent() {
     }, 75);
   }, [feedHeight]);
 
-  if (isProfileLoading) {
+
+  /* ============================================================
+     ⚡️ PAGE RENDER ENGINE
+     ============================================================ */
+  // We no longer hold the entire page hostage waiting for the link status.
+  // The profile renders instantly as soon as the core data is ready.
+  const isPageReady = !isProfileLoading && !isPostsLoading;
+
+  if (!isPageReady) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center overflow-x-hidden">
         <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -712,6 +772,32 @@ function PublicProfileContent() {
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes shimmer {
+          100% { transform: translateX(100%); }
+        }
+        .animate-shimmer {
+          position: relative;
+          overflow: hidden;
+          background-color: rgba(39, 39, 42, 0.4);
+        }
+        .animate-shimmer::after {
+          position: absolute;
+          top: 0;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          transform: translateX(-100%);
+          background-image: linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0) 0,
+            rgba(255, 255, 255, 0.04) 20%,
+            rgba(255, 255, 255, 0.08) 60%,
+            rgba(255, 255, 255, 0)
+          );
+          animation: shimmer 1.5s infinite;
+          content: '';
+        }
       `}} />
       <ProfileEffect effectType={userProfile.profile_effect || 'none'} />
 
@@ -836,15 +922,52 @@ function PublicProfileContent() {
             </div>
           )}
 
+          {/* ⚡️ PROGRESSIVE RENDERING: Buttons */}
           <div className="flex gap-2 pt-1">
             {isOwner ? (
               <button onClick={() => router.push('/profile')} className="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white font-semibold py-2 rounded-xl text-sm transition-all active:scale-95 border border-zinc-800">
                 Manage Profile
               </button>
+            ) : !isInitialCheckDone ? (
+              <>
+                {/* Luxury Shimmer Loader matching the Home page search UI */}
+                <div className="flex-1 h-[38px] rounded-xl animate-shimmer border border-zinc-800/50" />
+                <button className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-all active:scale-95 border border-zinc-800 flex items-center justify-center">
+                  <MessageCircle className="w-4 h-4" />
+                </button>
+              </>
+            ) : linkStatus === 'needs_response' ? (
+              <div className="flex-1 flex gap-2">
+                <button 
+                  onClick={handleAcceptRequest}
+                  disabled={isLinkLoading}
+                  className="flex-1 bg-[#4fa8ff] text-black font-bold py-2 rounded-xl text-sm transition-all active:scale-95 hover:bg-[#3d93e6] disabled:opacity-50"
+                >
+                  Confirm
+                </button>
+                <button 
+                  onClick={handleRejectRequest}
+                  disabled={isLinkLoading}
+                  className="flex-1 bg-zinc-900 text-white font-bold py-2 rounded-xl text-sm transition-all active:scale-95 border border-zinc-800 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
             ) : (
               <>
-                <button className="flex-1 bg-[#4fa8ff] text-black font-bold py-2 rounded-xl text-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-                  <UserPlus className="w-4 h-4" /> Team Up
+                <button 
+                  onClick={handleLinkClick}
+                  disabled={isLinkLoading}
+                  className={`flex-1 font-bold py-2 rounded-xl text-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                    linkStatus === 'accepted' 
+                      ? 'bg-zinc-800 text-white border border-zinc-700' 
+                      : linkStatus === 'pending'
+                      ? 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                      : 'bg-[#4fa8ff] text-black hover:bg-[#3d93e6]'
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4" /> 
+                  {linkStatus === 'accepted' ? 'Linked' : linkStatus === 'pending' ? 'Pending' : 'Link Up'}
                 </button>
                 <button className="bg-zinc-900 hover:bg-zinc-800 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-all active:scale-95 border border-zinc-800 flex items-center justify-center">
                   <MessageCircle className="w-4 h-4" />

@@ -12,7 +12,8 @@ export function useNotifications(userId: string | undefined) {
       const { data, error } = await supabaseClient
         .from("notifications")
         .select(`
-          id, type, is_read, updated_at, post_id,
+          id, type, is_read, updated_at, post_id, sender_id,
+          sender:users!sender_id ( username, avatar_url, full_name ),
           post:posts (
             id,
             image_url,

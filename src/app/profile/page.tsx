@@ -655,7 +655,6 @@ function ProfileContent() {
 
     if (targetPostId && userPosts.length > 0 && !deepLinkConsumed.current) {
       deepLinkConsumed.current = true;
-
       const postIndex = userPosts.findIndex((p: any) => p.id === targetPostId);
       
       if (postIndex !== -1) {
@@ -672,6 +671,9 @@ function ProfileContent() {
           }
         });
 
+        // Add this line to catch the "options" signal from the home page
+        if (sheetToOpen === 'options') setPostOptionsMenu(userPosts[postIndex]);
+        
         if (sheetToOpen === 'likes') setActiveLikesPostId(targetPostId);
         if (sheetToOpen === 'comments') setActiveCommentPostId(targetPostId);
         

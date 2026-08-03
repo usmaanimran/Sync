@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 import CommentSheet from './CommentSheet';
-import LikesSheet from './LikesSheet'; 
+import LikesSheet from './LikesSheet';
 import NotificationsSheet from './NotificationsSheet';
 import useSheetDrag from '../profile/useSheetDrag';
 import { getGlobalFeed } from "../actions/feed";
@@ -76,7 +76,7 @@ const LikersText = ({ likers, onClick }: { likers: any[], onClick: () => void })
 const parsePostImages = (post: any) => {
   const rawData = post?.image_urls || post?.image_url;
   if (!rawData) return [];
-  
+
   let parsedArray = [];
   if (Array.isArray(rawData)) {
     parsedArray = rawData;
@@ -114,54 +114,49 @@ const timeAgo = (dateString: string) => {
   return "now";
 };
 
+// 3. Optimistic Like Button
 const LikeButton = ({ postId, initialLiked, initialCount }: { postId: string, initialLiked: boolean, initialCount: number }) => {
   const [liked, setLiked] = useState(initialLiked);
   const [count, setCount] = useState(initialCount);
-
-  // Keep track of what the database actually knows
   const serverState = useRef(initialLiked);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clean up timeout if the component unmounts while tapping
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
+  const handleLike = useCallback((e?: React.MouseEvent | Event) => {
+    if (e && 'stopPropagation' in e) (e as React.MouseEvent).stopPropagation();
 
-  const handleLike = (e: React.MouseEvent) => {
-    e.stopPropagation();
-
-    // 1. Instantly flip the UI on EVERY tap (No locks, 0 latency)
     const newLikedState = !liked;
     setLiked(newLikedState);
     setCount(prev => newLikedState ? prev + 1 : prev - 1);
 
-    // 2. Clear any pending server updates from previous rapid taps
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // 3. Wait for you to stop tapping before syncing with the database
     timeoutRef.current = setTimeout(() => {
-      // Only hit the database if your final UI state differs from the server
       if (newLikedState !== serverState.current) {
         toggleLike(postId)
           .then((res) => {
             if (res?.success) {
-              serverState.current = newLikedState; // Update our known truth
+              serverState.current = newLikedState;
             } else {
-              // Revert UI if the server explicitly fails
               setLiked(serverState.current);
               setCount(prev => serverState.current ? prev + 1 : prev - 1);
             }
           })
           .catch(() => {
-            // Revert UI on network failure
             setLiked(serverState.current);
             setCount(prev => serverState.current ? prev + 1 : prev - 1);
           });
       }
-    }, 500); // Waits half a second after your last tap to fire
-  };
+    }, 500); 
+  }, [liked, postId]);
+
+  // Listen for the double tap event from the media area
+  useEffect(() => {
+    const handleForceLike = () => {
+       if (!liked) handleLike();
+    };
+    window.addEventListener(`double-tap-like-${postId}`, handleForceLike);
+    return () => window.removeEventListener(`double-tap-like-${postId}`, handleForceLike);
+  }, [liked, handleLike, postId]);
 
   return (
     <div className="flex items-center gap-1.5 z-20 relative">
@@ -188,29 +183,26 @@ const FeedImageCarousel = ({ images }: { images: string[] }) => {
 
   if (images.length === 1) {
     return (
-      <div className="w-full bg-zinc-950 mb-3 flex items-center justify-center">
-        <img src={images[0]} alt="Post content" className="w-full h-auto max-h-[70vh] object-cover" />
+      <div className="w-full flex items-center justify-center">
+        <img src={images[0]} alt="Post content" className="w-full h-auto max-h-[70vh] object-cover pointer-events-none" />
       </div>
     );
   }
 
   const handleScroll = () => {
-  if (scrollRef.current) {
-    // Escape the render phase synchronously
-    requestAnimationFrame(() => {
-      // Ensure the ref still exists after the frame resolves
-      if (!scrollRef.current) return; 
-      
-      const scrollPosition = scrollRef.current.scrollLeft;
-      const width = scrollRef.current.clientWidth;
-      const newIndex = Math.round(scrollPosition / width);
-      setActiveIndex(newIndex);
-    });
-  }
-};
+    if (scrollRef.current) {
+      requestAnimationFrame(() => {
+        if (!scrollRef.current) return;          
+        const scrollPosition = scrollRef.current.scrollLeft;
+        const width = scrollRef.current.clientWidth;
+        const newIndex = Math.round(scrollPosition / width);
+        setActiveIndex(newIndex);
+      });
+    }
+  };
 
   return (
-    <div className="relative w-full bg-zinc-950 mb-3 group">
+    <div className="relative w-full group">
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
@@ -218,7 +210,7 @@ const FeedImageCarousel = ({ images }: { images: string[] }) => {
       >
         {images.map((img, i) => (
           <div key={i} className="w-full flex-none snap-center flex items-center justify-center">
-            <img src={img} alt={`Post ${i+1}`} className="w-full h-auto max-h-[70vh] object-cover" />
+            <img src={img} alt={`Post ${i+1}`} className="w-full h-auto max-h-[70vh] object-cover pointer-events-none" />
           </div>
         ))}
       </div>
@@ -227,7 +219,7 @@ const FeedImageCarousel = ({ images }: { images: string[] }) => {
         {activeIndex + 1} / {images.length}
       </div>
 
-      <div className="absolute -bottom-4 inset-x-0 flex justify-center gap-1.5">
+      <div className="absolute -bottom-4 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
         {images.map((_, i) => (
           <div 
             key={i} 
@@ -241,17 +233,181 @@ const FeedImageCarousel = ({ images }: { images: string[] }) => {
   );
 };
 
+/* ============================================================
+   ISOLATED POST COMPONENT (Handles Local Menus & Double Taps)
+   ============================================================ */
+const FeedPostItem = ({ post, session, router, setActiveCommentPostId, setActiveLikesPostId }: any) => {
+  const images = parsePostImages(post);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [hearts, setHearts] = useState<{ id: number; x: number; y: number }[]>([]);
+  
+  const lastTapRef = useRef<number>(0);
+
+  // Safely closes the menu by triggering the exit animation first
+  const closeMenu = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setMenuOpen(false);
+      setIsClosing(false);
+    }, 200); // Matches the 0.2s CSS animation exactly
+  };
+
+  const toggleMenu = () => {
+    if (menuOpen) {
+      closeMenu();
+    } else {
+      setMenuOpen(true);
+    }
+  };
+
+  const handleMediaClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300; 
+
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const newHeart = { id: Date.now(), x, y };
+      setHearts((prev) => [...prev, newHeart]);
+
+      window.dispatchEvent(new CustomEvent(`double-tap-like-${post.id}`));
+
+      setTimeout(() => {
+        setHearts((prev) => prev.filter((h) => h.id !== newHeart.id));
+      }, 1000);
+
+      lastTapRef.current = 0; 
+    } else {
+      lastTapRef.current = now; 
+    }
+  };
+
+  return (
+    <div className="w-full flex flex-col border-b border-zinc-900/80 pb-6 pt-4">
+      {/* Post Header */}
+      <div className="flex items-center justify-between px-4 mb-3">
+        <div 
+           className="flex items-center cursor-pointer"
+           onClick={() => router.push(`/u/${post.users?.username}`)}
+        >
+          <img 
+             src={post.users?.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${post.users?.username}&backgroundColor=ffffff`}
+             alt={post.users?.username}
+             className="w-9 h-9 rounded-full object-cover border border-zinc-800"
+           />
+          <div className="ml-3 flex flex-col">
+            <div className="flex items-center gap-1">
+              <h4 className="font-bold text-sm text-white">{post.users?.full_name || 'Anonymous User'}</h4>
+              <CheckCircle2 className="w-3 h-3 text-zinc-400 fill-zinc-400/20" />
+            </div>
+            <span className="text-[11px] text-zinc-500 font-medium">@{post.users?.username}</span>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3 relative">
+          <span className="text-zinc-500 text-xs font-medium">{timeAgo(post.created_at)}</span>
+
+          {/* 3-Dot Menu (Only for post owner) */}
+          {post.user_id === (session?.user as any)?.id && (
+            <div className="relative">
+              <button 
+                onClick={toggleMenu}
+                className="text-zinc-500 hover:text-white transition-colors active:scale-90"
+              >
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+
+              {menuOpen && (
+                <div className={`absolute right-0 mt-2 w-36 bg-[#1a2229] border border-zinc-700/50 rounded-xl shadow-xl z-50 overflow-hidden ${isClosing ? 'animate-mech-close' : 'animate-mech-drop'}`}>
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      // Wait just a split second so you see the menu click before the redirect
+                      setTimeout(() => {
+                        router.push(`/profile?postId=${post.id}&open=options`);
+                      }, 150);
+                    }}
+                    className="flex w-full items-center px-4 py-2.5 text-sm text-white hover:bg-zinc-800/50 transition-colors font-semibold"
+                  >
+                    Edit Post
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Media Area (Custom onClick double-tap handler) */}
+      <div 
+        className="relative w-full bg-zinc-950 mb-3 select-none overflow-hidden" 
+        onClick={handleMediaClick}
+      >
+        <FeedImageCarousel images={images} />
+        
+        {/* Floating Tapped Hearts Overlay */}
+        {hearts.map((h) => (
+          <div
+            key={h.id}
+            className="absolute pointer-events-none z-50 animate-heart-pop"
+            style={{ left: h.x, top: h.y, transform: 'translate(-50%, -50%)' }}
+          >
+            <Heart className="w-24 h-24 text-red-500 fill-red-500 drop-shadow-2xl" />
+          </div>
+        ))}
+      </div>
+
+      {/* Engagement Footer */}
+      <div className="px-3 flex items-center gap-4 mb-2 mt-2">
+        <LikeButton postId={post.id} initialLiked={post.hasLiked} initialCount={post.likeCount} />
+        
+        <div className="flex items-center gap-1.5 z-20 relative">
+          <button 
+            onClick={() => setActiveCommentPostId(post.id)}
+            className="flex items-center justify-center p-1 group transition-all active:scale-95"
+          >
+            <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-zinc-300 transition-colors" />
+          </button>
+          {post.commentCount > 0 && (
+            <span className="text-sm font-bold text-white mr-2">
+              {formatCount(post.commentCount)}
+            </span>
+          )}
+        </div>
+        
+        <button className="hover:bg-zinc-800 transition-colors active:scale-95 ml-auto p-1 rounded-full">
+          <Send className="w-[26px] h-[26px] text-zinc-100 hover:text-zinc-300" />
+        </button>
+      </div>
+
+      <LikersText likers={post.likers || []} onClick={() => setActiveLikesPostId(post.id)} />
+
+      <div className="px-4">
+        {post.content && (
+          <p className="text-[14px] text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
+            {post.content}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+   MAIN FEED PAGE
+   ============================================================ */
 type SearchPhase = 'idle' | 'entering' | 'open' | 'exiting';
 
-// 5. Main Page Component
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  // Observer Ref (MUST BE DEFINED HERE, BUT USED AFTER QUERY)
   const observerRef = useRef<HTMLDivElement>(null);
 
-  // Sheet States
+  // Global Sheet States
   const [activeCommentPostId, setActiveCommentPostId] = useState<string | null>(null);
   const [activeLikesPostId, setActiveLikesPostId] = useState<string | null>(null); 
   const [isNotifsOpen, setIsNotifsOpen] = useState(false);
@@ -259,14 +415,11 @@ export default function HomePage() {
   // Immersive Search Animation States
   const [searchPhase, setSearchPhase] = useState<SearchPhase>('idle');
   const [searchInput, setSearchInput] = useState('');
-
   const searchMounted = searchPhase !== 'idle';
   const searchOpen    = searchPhase === 'open';
 
-  // Notifications Hook
-  const { notifications, unreadCount, markAsRead } = useNotifications(session?.user?.id);
+  const { notifications, unreadCount, markAsRead } = useNotifications((session?.user as any)?.id);
 
-  // Initialize Infinite Query FIRST (Before useEffects that depend on it)
   const {
     data,
     fetchNextPage,
@@ -280,10 +433,8 @@ export default function HomePage() {
     initialPageParam: 0,
   });
 
-  // Flatten all page post arrays into a single continuous list
   const posts = data?.pages.flatMap((page) => page?.posts || []) || [];
 
-  // Setup Intersection Observer AFTER query initialization
   useEffect(() => {
     const target = observerRef.current;
     if (!target) return;
@@ -301,7 +452,6 @@ export default function HomePage() {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Prevent Background Scrolling When Any Overlay is Open
   useEffect(() => {
     if (
       searchMounted || 
@@ -318,32 +468,27 @@ export default function HomePage() {
     };
   }, [searchMounted, activeCommentPostId, activeLikesPostId, isNotifsOpen]);
 
-  // 1. Hyper-fast 75ms debounce state for Search
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchInput), 75); 
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // 2. React Query handles the fetching, caching, and loading states automatically
   const { data: searchResults = [], isFetching } = useQuery({
     queryKey: ['search', debouncedSearch],
     queryFn: async () => {
       const res = await searchUsers(debouncedSearch);
       return res.success ? (res.users || []) : [];
     },
-    // Only run the query if there is actually text to search
     enabled: debouncedSearch.trim().length > 0,
-    // Cache the results for 10 minutes. Backspacing is now literally 0 latency.
     staleTime: 1000 * 60 * 10, 
-  });
+  }); 
 
-   const isSearching = isFetching || searchInput !== debouncedSearch;
+  const isSearching = isFetching || searchInput !== debouncedSearch;
 
-  // Drags
   const commentDrag = useSheetDrag(!!activeCommentPostId, () => setActiveCommentPostId(null), { closeThreshold: 150, opacityDivisor: 500 });
-  const likesDrag = useSheetDrag(!!activeLikesPostId, () => setActiveLikesPostId(null), { closeThreshold: 150, opacityDivisor: 500 }); 
+  const likesDrag = useSheetDrag(!!activeLikesPostId, () => setActiveLikesPostId(null), { closeThreshold: 150, opacityDivisor: 500 });
 
   const liveRadarBeacons = [
     { id: 1, name: "Zaidh", urgent: true },
@@ -352,7 +497,6 @@ export default function HomePage() {
     { id: 4, name: "Zehna", urgent: false },
   ];
 
-  // Satisfying Search Mount Logic
   const openSearch = () => {
     setSearchInput('');
     setSearchPhase('entering');
@@ -378,6 +522,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-transparent text-zinc-100 font-sans selection:bg-white/20 pb-24">
+      {/* Global Animation Styles */}
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -386,12 +531,75 @@ export default function HomePage() {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
         }
-      `}} />
+        
+        /* The localized double-tap heart expansion and fade animation */
+        @keyframes heartPop {
+          0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+          15% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+          30% { transform: translate(-50%, -50%) scale(1); }
+          70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+          100% { opacity: 0; transform: translate(-50%, -100%) scale(0.9); }
+        }
+        .animate-heart-pop {
+          animation: heartPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
 
+        /* Add this right below your heartPop keyframes */
+@keyframes mechDrop {
+          0% { opacity: 0; transform: scale(0.9) translateY(-10px); }
+          100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        /* ADD THIS FOR THE REVERSE SNAP */
+        @keyframes mechDropOut {
+          0% { opacity: 1; transform: scale(1) translateY(0); }
+          100% { opacity: 0; transform: scale(0.9) translateY(-10px); }
+        }
+        
+        .animate-mech-drop {
+          transform-origin: top right;
+          animation: mechDrop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        /* ADD THIS CSS CLASS */
+        .animate-mech-close {
+          transform-origin: top right;
+          animation: mechDropOut 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+
+        @keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(39, 39, 42, 0.6); /* zinc-800 with some transparency */
+}
+
+.animate-shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.5s infinite;
+  content: '';
+}
+      `}} />
       <div className="max-w-xl mx-auto w-full flex flex-col relative z-10">
         
-        {/* TOP BAR WITH PERFECT TOP-SEAL */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#121212]/90 backdrop-blur-2xl ... before:bg-transparent">
+        {/* TOP BAR */}
+        <div className="flex items-center justify-between px-5 py-3.5 bg-[#121212]/90 backdrop-blur-2xl">
           <span className="font-extrabold text-[22px] tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white via-zinc-200 to-zinc-500">
             Nexus
           </span>
@@ -428,7 +636,6 @@ export default function HomePage() {
               </div>
               <span className="text-[11px] font-medium text-zinc-400 truncate w-16 text-center">Drop</span>
             </div>
-
             {liveRadarBeacons.map((beacon) => (
               <div key={beacon.id} className="snap-start shrink-0 flex flex-col items-center gap-1.5 cursor-pointer active:scale-95 transition-transform">
                 <div className={`w-17 h-17 rounded-full p-[2.5px] ${beacon.urgent ? 'bg-gradient-to-tr from-orange-500 to-pink-500' : 'bg-zinc-800'}`}>
@@ -451,76 +658,16 @@ export default function HomePage() {
           {posts.length === 0 ? (
             <div className="py-20 text-center text-zinc-500 text-sm">No posts on the grid yet.</div>
           ) : (
-            posts.map((post: any) => {
-              const images = parsePostImages(post);
-              
-              return (
-                <div key={post.id} className="w-full flex flex-col border-b border-zinc-900/80 pb-6 pt-4">
-                  
-                  {/* Post Header */}
-                  <div className="flex items-center justify-between px-4 mb-3">
-                    <div 
-                       className="flex items-center cursor-pointer"
-                       onClick={() => router.push(`/u/${post.users?.username}`)}
-                    >
-                      <img 
-                        src={post.users?.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${post.users?.username}&backgroundColor=ffffff`}
-                        alt={post.users?.username}
-                        className="w-9 h-9 rounded-full object-cover border border-zinc-800" 
-                      />
-                      <div className="ml-3 flex flex-col">
-                        <div className="flex items-center gap-1">
-                          <h4 className="font-bold text-sm text-white">{post.users?.full_name || 'Anonymous User'}</h4>
-                          <CheckCircle2 className="w-3 h-3 text-zinc-400 fill-zinc-400/20" />
-                        </div>
-                        <span className="text-[11px] text-zinc-500 font-medium">@{post.users?.username}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <span className="text-zinc-500 text-xs font-medium">{timeAgo(post.created_at)}</span>
-                      <button className="text-zinc-500 hover:text-white transition-colors active:scale-90">
-                        <MoreHorizontal className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <FeedImageCarousel images={images} />
-
-                  <div className="px-3 flex items-center gap-4 mb-2 mt-2">
-                    <LikeButton postId={post.id} initialLiked={post.hasLiked} initialCount={post.likeCount} />
-                    
-                    <div className="flex items-center gap-1.5 z-20 relative">
-                      <button 
-                        onClick={() => setActiveCommentPostId(post.id)}
-                        className="flex items-center justify-center p-1 group transition-all active:scale-95"
-                      >
-                        <MessageSquare className="w-[26px] h-[26px] text-zinc-100 group-hover:text-zinc-300 transition-colors" />
-                      </button>
-                      {post.commentCount > 0 && (
-                        <span className="text-sm font-bold text-white mr-2">
-                          {formatCount(post.commentCount)}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <button className="hover:bg-zinc-800 transition-colors active:scale-95 ml-auto p-1 rounded-full">
-                      <Send className="w-[26px] h-[26px] text-zinc-100 hover:text-zinc-300" />
-                    </button>
-                  </div>
-
-                  <LikersText likers={post.likers || []} onClick={() => setActiveLikesPostId(post.id)} />
-
-                  <div className="px-4">
-                    {post.content && (
-                      <p className="text-[14px] text-slate-200 leading-relaxed break-words whitespace-pre-wrap">
-                        {post.content}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            posts.map((post: any) => (
+              <FeedPostItem 
+                key={post.id} 
+                post={post} 
+                session={session} 
+                router={router} 
+                setActiveCommentPostId={setActiveCommentPostId} 
+                setActiveLikesPostId={setActiveLikesPostId} 
+              />
+            ))
           )}
           
           {/* SCROLL SENTINEL */}
@@ -535,22 +682,22 @@ export default function HomePage() {
           isOpen={isNotifsOpen} 
           onClose={() => setIsNotifsOpen(false)} 
           notifications={notifications} 
-          currentUsername={session?.user?.name} 
+          currentUsername={session?.user?.name}
         />
 
         <CommentSheet 
-          isOpen={!!activeCommentPostId}
-          drag={commentDrag}
-          onClose={() => setActiveCommentPostId(null)}
-          postId={activeCommentPostId}
-          currentUserAvatar={session?.user?.image || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${session?.user?.name || 'User'}&backgroundColor=ffffff`}
+          isOpen={!!activeCommentPostId} 
+          drag={commentDrag} 
+          onClose={() => setActiveCommentPostId(null)} 
+          postId={activeCommentPostId} 
+          currentUserAvatar={session?.user?.image || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${session?.user?.name || 'User'}&backgroundColor=ffffff`} 
         />
 
         <LikesSheet 
-          isOpen={!!activeLikesPostId}
-          drag={likesDrag}
-          onClose={() => setActiveLikesPostId(null)}
-          postId={activeLikesPostId}
+          isOpen={!!activeLikesPostId} 
+          drag={likesDrag} 
+          onClose={() => setActiveLikesPostId(null)} 
+          postId={activeLikesPostId} 
         />
 
         {/* ============================================================
@@ -577,7 +724,7 @@ export default function HomePage() {
                 transition: 'transform 800ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 400ms ease-out',
               }}
             >
-              {/* Input Wrapper - Slimmed down for mobile */}
+              {/* Input Wrapper */}
               <div 
                 className="flex-1 flex items-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800/90 rounded-xl px-4 py-2 border border-white/10 focus-within:border-white/30 focus-within:bg-zinc-900 focus-within:shadow-[0_0_30px_rgba(255,255,255,0.08)] transition-all duration-300 group overflow-hidden"
                 style={{
@@ -587,16 +734,16 @@ export default function HomePage() {
               >
                 <Search className="w-[18px] h-[18px] text-zinc-500 group-focus-within:text-white transition-colors shrink-0" strokeWidth={2.5} />
                 <input
-  type="search"
-  value={searchInput}
-  onChange={e => setSearchInput(e.target.value)}
-  placeholder="Search Nexus..."
-  className="bg-transparent border-none outline-none text-[15px] text-white placeholder:text-zinc-500 w-full font-medium tracking-tight h-6 leading-6 [&::-webkit-search-cancel-button]:appearance-none"
-  autoFocus
-  autoComplete="off"
-  autoCorrect="off"
-  spellCheck="false"
-/>
+                  type="search"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  placeholder="Search Nexus..."
+                  className="bg-transparent border-none outline-none text-[15px] text-white placeholder:text-zinc-500 w-full font-medium tracking-tight h-6 leading-6 [&::-webkit-search-cancel-button]:appearance-none"
+                  autoFocus
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck="false"
+                />
               </div>
 
               {/* Staggered Cancel Button */}
@@ -634,39 +781,51 @@ export default function HomePage() {
               ) : (
                 <div className="flex flex-col gap-2">
                   {isSearching && searchResults.length === 0 ? (
-                     <div className="text-center text-zinc-500 mt-10 text-sm">Searching...</div>
-                  ) : searchResults.length === 0 ? (
+  <div className="flex flex-col gap-2 mt-2">
+    {[...Array(3)].map((_, i) => (
+      <div key={i} className="flex items-center gap-4 p-3 rounded-2xl">
+        {/* Skeleton Avatar with Shimmer */}
+        <div className="w-12 h-12 rounded-full shrink-0 animate-shimmer" />
+        <div className="flex flex-col gap-2.5 w-full">
+          {/* Skeleton Name with Shimmer */}
+          <div className="h-3.5 rounded-full w-32 animate-shimmer" />
+          {/* Skeleton Username with Shimmer */}
+          <div className="h-2.5 rounded-full w-20 animate-shimmer" />
+        </div>
+      </div>
+    ))}
+  </div>
+) : searchResults.length === 0 ? (
                      <div className="text-center text-zinc-500 mt-10 text-sm">No users found.</div>
                   ) : (
                     searchResults.map((user, i) => (
-  <div 
-    key={user.id}
-    onClick={() => {
-      closeSearch();
-      router.push(`/u/${user.username}`);
-    }}
-    className="flex items-center gap-4 p-3 rounded-2xl hover:bg-zinc-900/60 transition-colors cursor-pointer active:scale-[0.98]"
-    style={{
-      animation: `slideUpResult 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms forwards`,
-      opacity: 0 
-    }}
-  >
-    <img 
-      src={user.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.username}&backgroundColor=ffffff`} 
-      alt={user.username} 
-      className="w-12 h-12 rounded-full border border-zinc-800 object-cover shrink-0" 
-    />
-    <div className="flex flex-col">
-      <span className="font-bold text-[15px] text-white tracking-tight">{user.full_name}</span>
-      <span className="text-[13px] text-zinc-500 font-medium">@{user.username}</span>
-    </div>
-  </div>
-))
+                      <div 
+                        key={user.id}
+                        onClick={() => {
+                          closeSearch();
+                          router.push(`/u/${user.username}`);
+                        }}
+                        className="flex items-center gap-4 p-3 rounded-2xl hover:bg-zinc-900/60 transition-colors cursor-pointer active:scale-[0.98]"
+                        style={{
+                          animation: `slideUpResult 0.3s cubic-bezier(0.16, 1, 0.3, 1) ${i * 40}ms forwards`,
+                          opacity: 0 
+                        }}
+                      >
+                        <img 
+                          src={user.avatar_url || `https://api.dicebear.com/10.x/notionists-neutral/svg?seed=${user.username}&backgroundColor=ffffff`}
+                          alt={user.username}
+                          className="w-12 h-12 rounded-full border border-zinc-800 object-cover shrink-0"
+                        />
+                        <div className="flex flex-col">
+                          <span className="font-bold text-[15px] text-white tracking-tight">{user.full_name}</span>
+                          <span className="text-[13px] text-zinc-500 font-medium">@{user.username}</span>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               )}
             </div>
-
           </div>
         )}
       </div>
